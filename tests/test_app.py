@@ -87,6 +87,15 @@ class FalsaDeye(BaseHTTPRequestHandler):
             r = {"success": True, "accessToken": "abc"} if ok else {"success": False, "msg": "auth failed"}
         elif self.path == "/v1.0/station/list":
             r = {"success": True, "stationList": [{"id": 777, "name": "Casa"}], "total": 1}
+        elif self.path == "/v1.0/station/history" and corpo["granularity"] == 2:
+            from datetime import date as _d, timedelta as _t
+            ini, fim = _d.fromisoformat(corpo["startAt"]), _d.fromisoformat(corpo["endAt"])
+            itens, d = [], ini
+            while d < fim:  # 10 kWh por dia em casa, 2 da rede, 7 injetados
+                itens.append({"year": d.year, "month": d.month, "day": d.day, "consumptionValue": 10,
+                              "purchaseValue": 2, "gridValue": 7, "generationValue": 15, "dischargeValue": 4})
+                d += _t(days=1)
+            r = {"success": True, "stationDataItems": itens}
         elif self.path == "/v1.0/station/history":
             assert corpo["granularity"] == 3 and corpo["stationId"] == 777
             r = {"success": True, "stationDataItems": [
@@ -167,7 +176,7 @@ def test_paginas_e_formularios(cliente):
     dados = c.get("/api/dados").get_json()
     assert [m["empresa_compra"] for m in dados["meses"]] == ["MEO Energia", "MEO Energia", "EDP"]
 
-    c.post("/faturas", data={"csrf": t, "mes": "2026-08", "total_eur": "25,10"})
+    c.post("/faturas", data={"csrf": t, "inicio": "2026-08-01", "fim": "2026-08-31", "kwh": "48", "total_eur": "25,10"})
     dados = c.get("/api/dados").get_json()
     assert dados["meses"][1]["fatura_com"] == 25.10
 
@@ -263,14 +272,14 @@ def test_diario_so_le_mes_atual_e_anterior(cliente):
     c.post("/sincronizar", data={"csrf": t})  # 1.ª vez: histórico todo
     FalsaDeye.pedidos.clear()
     c.post("/sincronizar", data={"csrf": t})  # dia seguinte: só os 2 últimos meses
-    hist = [corpo for caminho, corpo, _ in FalsaDeye.pedidos if caminho.endswith("/station/history")]
+    hist = [corpo for caminho, corpo, _ in FalsaDeye.pedidos if caminho.endswith("/station/history") and corpo["granularity"] == 3]
     from app.calc import somar_meses
     from datetime import date
     atual = date.today().strftime("%Y-%m")
     assert hist and hist[0]["startAt"] == max("2026-07", somar_meses(atual, -1)) and hist[0]["endAt"] == atual
     FalsaDeye.pedidos.clear()
     c.post("/sincronizar", data={"csrf": t, "completo": "1"})  # botão "Reler todo o histórico"
-    hist = [corpo for caminho, corpo, _ in FalsaDeye.pedidos if caminho.endswith("/station/history")]
+    hist = [corpo for caminho, corpo, _ in FalsaDeye.pedidos if caminho.endswith("/station/history") and corpo["granularity"] == 3]
     assert hist[0]["startAt"] == "2026-07"
 
 
@@ -314,3 +323,77 @@ def test_sem_variaveis_cria_senha_e_deye_pela_app(cliente, monkeypatch):
     assert c.get("/api/cron/sincronizar").status_code == 401
     r = c.get("/api/cron/sincronizar", headers={"User-Agent": "vercel-cron/1.0"})
     assert r.status_code == 200 and "há pouco" in r.get_json()["mensagem"]
+
+
+
+# ---------- faturas da MEO Energia ----------
+DADOS = os.path.join(os.path.dirname(__file__), "dados")
+
+
+def texto(nome):
+    return open(os.path.join(DADOS, nome), encoding="utf-8").read()
+
+
+def test_ler_fatura_meo():
+    from app.faturas_meo import ler
+    a = ler(texto("meo_2026-08.txt"))
+    assert (a["inicio"], a["fim"], a["dias"]) == ("2026-07-09", "2026-08-20", 43)
+    assert a["numero"] == "FA ME26/1 885 673" and a["emitida"] == "2026-08-27"
+    assert (a["kwh"], a["preco_kwh"], a["potencia_eur_dia"]) == (63.0, 0.1499, 0.47)
+    assert (a["energia_eur"], a["potencia_eur"], a["cav_eur"], a["iec_eur"], a["dgeg_eur"]) == (9.44, 20.21, 4.03, 0.06, 0.07)
+    assert (a["iva_eur"], a["total_eur"]) == (5.49, 39.30) and a["confere"]
+    assert a["extra_vs_regulado_eur"] == 5.99 and a["leitura"] == "real" and a["kwh_vazio"] == 26
+    b = ler(texto("meo_2026-09.txt"))
+    assert (b["inicio"], b["fim"], b["kwh"], b["total_eur"], b["kwh_vazio"]) == ("2026-08-21", "2026-09-20", 54.0, 29.72, 40)
+
+
+def test_refazer_fatura_da_o_total_real():
+    from app.calc import Impostos, calcular_periodo
+    from app.faturas_meo import ler
+    for nome in ("meo_2026-08.txt", "meo_2026-09.txt"):
+        f = ler(texto(nome))
+        r = calcular_periodo(f, {"consumo_kwh": f["kwh"], "rede_kwh": f["kwh"], "injetado_kwh": 0, "fonte": "x"}, None, Impostos())
+        assert r["fatura_sem"] == f["total_eur"]  # mesmo consumo → mesma fatura
+
+
+def test_faturas_repartidas_pelos_meses():
+    from app.calc import faturas_por_mes
+    from app.faturas_meo import ler
+    m = faturas_por_mes([ler(texto("meo_2026-08.txt")), ler(texto("meo_2026-09.txt"))])
+    assert m == {"2026-08": round(39.30 * 20 / 43 + 29.72 * 11 / 31, 2)}  # só agosto fica coberto inteiro
+
+
+def test_carregar_pdf_e_email(cliente, monkeypatch):
+    import base64
+    from app import faturas_meo
+    textos = {b"PDF-AGO": texto("meo_2026-08.txt"), b"PDF-SET": texto("meo_2026-09.txt")}
+    monkeypatch.setattr(faturas_meo, "texto_do_pdf", lambda dados, senha=None: textos[dados])
+    c = cliente
+    entrar(c)
+    t = csrf(c)
+    c.post("/sincronizar", data={"csrf": t, "completo": "1"})  # dados diários da Deye simulada
+    import io
+    r = c.post("/faturas", data={"csrf": t, "pdf": (io.BytesIO(b"PDF-AGO"), "agosto.pdf")},
+               content_type="multipart/form-data", follow_redirects=True)
+    html = r.get_data(as_text=True)
+    assert "FA ME26/1 885 673" in html and "39,30 €" in html and "Poupaste" in html
+    assert "mercado regulado" in html and "bi-horária" not in html  # 26 de 63 kWh em vazio: menos de metade
+
+    # por email: endereço secreto
+    c.post("/definicoes/email", data={"csrf": t, "acao": "novo"})
+    from app import db
+    token = db.segredo("email_token")
+    assert c.post("/api/email/faturas/errado", json={}).status_code == 404
+    corpo = {"headers": {"subject": "A sua fatura MEO Energia", "from": "faturas@meoenergia.pt"}, "plain": "Olá",
+             "attachments": [{"file_name": "fatura.pdf", "content_type": "application/pdf",
+                              "content": base64.b64encode(b"PDF-SET").decode()}]}
+    r = c.post(f"/api/email/faturas/{token}", json=corpo)
+    assert r.status_code == 200 and "FA ME26/2 131 663" in r.get_json()["faturas"][0]
+    # email sem PDF (ex.: código de confirmação do Gmail) fica visível nas definições
+    c.post(f"/api/email/faturas/{token}", json={"headers": {"subject": "Gmail Forwarding Confirmation"}, "plain": "Código 123456"})
+    html = c.get("/definicoes").get_data(as_text=True)
+    assert "Gmail Forwarding Confirmation" in html and "123456" in html
+    html = c.get("/faturas").get_data(as_text=True)
+    assert "FA ME26/2 131 663" in html and "bi-horária" in html  # 40 de 54 kWh em vazio
+    # com dados diários: 31 dias × 10 kWh em casa
+    assert "310 kWh consumidos em casa" in html

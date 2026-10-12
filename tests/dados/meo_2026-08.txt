@@ -1,0 +1,151 @@
+MEO Energia - Comercialização de Energia, S.A.Sede: Av. Fontes Pereira de Melo, 40  CODIGO POSTAL
+€5,49
+IVA
+€4,16
+TAXAS, IMPOSTOS
+ E OUTROS
+€0,00
+DESCONTOS
+€29,65
+CONSUMO
+€39,30
+TOTAL
+DADOS DE PAGAMENTO
+Forma de pagamento: Débito Direto
+IBAN: IBAN
+Banco: X
+Total a pagar: € 39,30
+Débito a partir de: 11/09/2026
+Fatura: FA ME26/1 885 673 de 27/08/2026
+Período de faturação: 09/07/2026 a 20/08/2026
+Data limite de pagamento: 11/09/2026
+TITULAR
+MORADA
+CODIGO POSTAL
+Nome do titular
+TITULAR
+NIF
+000000000
+Morada de instalação 
+MORADA
+CODIGO POSTAL
+CPE (Código Ponto de Entrega): IBANXG
+Tarifa: MEO + MEO Energia FIXA DD FE M4 09.25
+Potência:  5,75kVA
+Ciclo: Sem Ciclo
+Horário: Simples 
+Vigência do contrato: Termina a 09/10/2026 (renovação automática)
+Fidelização: Não aplicável
+Contactos
+Avarias: 800 506 506 (E-Redes)
+Disponível 7 dias por semana, 24h por dia, chamada gratuita.
+Apoio ao cliente: 800 028 028
+Disponível nos dias úteis das 9 às 21h, chamada gratuita.
+Comunicação de leituras: 800 028 028 
+Disponível 7 dias por semana, 24h por dia, chamada gratuita.
+INFORMAÇÕES IMPORTANTES
+Pág.  1 de 3
+Não necessita enviar leituras, o seu contador é de leitura automática
+ATCUD: J6TM5VGG-1885673 
+Aceda aqui à sua Área de Cliente
+VPQd-Processado por Programa Certificado n.º 0030/AT / FT FA.ME26/1885673 | Os bens e/ou serviços foram colocados à disposição na data 2026-08-27 / © PRIMAVERA BSS / ATCUD: J6TM5VGG-1885673
+meoenergia.pt
+MEO Energia - Comercialização de Energia, S.A.Sede: Av. Fontes Pereira de Melo, 40  CODIGO POSTAL
+Pág.  2 de 3
+Fatura: FA ME26/1 885 673 de 27/08/2026
+IVAQuantidade ValorPreço Unit.Data FimData Início
+CONSUMO
+x =Descrição
+Potência
+5,75 kVA - Potência Contratada 23% €  0,4700 43,00 (Dias) €  20,2109/07/2026 20/08/2026 
+Energia
+Consumo medido em Simples 6% €  0,1499 63,00 (kWh) €  9,4409/07/2026 20/08/2026 
+€ 29,65
+ sem IVA
+O valor faturado pode ser dividido se existirem diferentes taxas de IVA.
+IVAQuantidade ValorPreço Unit.Data FimData Início
+TAXAS E IMPOSTOS
+x =Descrição
+CAV
+Contribuição AudioVisual 2,85 € x 12 meses / 365,25 dias 6% €  0,0936 43,00 (Dias) €  4,0309/07/2026 20/08/2026 
+IEC
+Imposto Especial de Consumo Eletricidade 23% €  0,0010 63,00 (kWh) €  0,0609/07/2026 20/08/2026 
+Outros
+Taxa de Exploração DGEG 23% €  0,0700 1,00 (UN) €  0,0709/07/2026 20/08/2026 
+€ 4,16
+ sem IVA
+€ 5,49
+IVA
+Valor TaxaIncidência
+6%
+23%
+€ 0,81
+€ 4,68
+€ 13,47
+€ 20,34
+   € 39,30TOTAL
+O total indicado não inclui valores em atraso. Para consultar os valores adicionais além desta fatura consulte o início desta página .
+O total da fatura inclui os encargos relativos ao acesso às redes no valor de € 16,14, antes de IVA, dos quais:
+Potência: 12,32 € (0,2864 € x 43 dias)
+Energia Simples: 3,82 € (0,0607 € x 63 kWh)
+Custos de Interesse Económico Geral (CIEG) € 9,20, antes de IVA.
+Estes valores são independentes do comercializador.
+O restante valor de € 13,51 (antes de taxas e impostos) corresponde a custos com energia e estrutura comercial (valores definidos pelo comercializador).
+INFORMAÇÃO RELATIVA ÀS CONDIÇÕES DE PREÇO REGULADO
+Informação relativa às condições de preço regulado
+Relativamente ao Mercado Regulado o seu tarifário apresenta um encargo suplementar de € 5,99 ( não incluindo taxas e impostos).
+A MEO Energia não tem disponível, para contratação, tarifa equivalente ao mercado regulado.
+Contador com leitura remota: CONTADOR LEITURAS
+Cheias Ponta Vazio Normal Tipo da LeituraData da Leitura
+2 689,00 kWh1 340,00 kWh 1 912,00 kWhReal09/07/2026
+2 712,00 kWh1 354,00 kWh 1 938,00 kWhReal21/08/2026
+HISTÓRICO DE CONSUMO
+0
+5
+10
+15
+20
+25
+30
+35
+2025-09 2025-10 2025-11 2025-12 2026-01 2026-02 2026-03 2026-04 2026-05 2026-06 2026-07 2026-08
+kWh
+O seu consumo médio de eletricidade nos últimos 12 meses é de 31,50 kWh/mês e o seu consumo acumulado em 2026 é de 63,00 kWh.
+VPQd-Processado por Programa Certificado n.º 0030/AT / FT FA.ME26/1885673 | Os bens e/ou serviços foram colocados à disposição na data 2026-08-27 / © PRIMAVERA BSS / ATCUD: J6TM5VGG-1885673
+meoenergia.pt
+MEO Energia - Comercialização de Energia, S.A.Sede: Av. Fontes Pereira de Melo, 40  CODIGO POSTAL
+Pág.  3 de 3
+Fatura: FA ME26/1 885 673 de 27/08/2026
+Pode consultar os dados do seu local de consumo e o respetivo histórico dos consumos de energia em https:// balcaodigital.e-redes.pt/home
+Eólica - 64,01%
+PRODUÇÃO DE ELETRICIDADE
+Saiba mais em: https://conteudos.meo.pt/meoenergia/Documentos/rotulagem-energetica-impactes-ambientais-meo-energia.pdf ou em https://www.erse.pt/eletricidade/rotulagem/rotulagem/
+Outras Renováveis - 21,28%
+Hídrica - 14,71%
+O consumo de eletricidade desta fatura gerou 0,00 kg de CO₂. Todas as fontes usadas na produção da energia são de origem 100% renovável. 
+Para o apuramento dos valores foram considerados os dados do último trimestre.
+Que impostos estou a pagar?
+O IEC é o imposto sobre os produtos petrolíferos e energéticos, cobrado pelo Estado aos consumidores de eletricidade.
+A CAV é a contribuição para o audiovisual. É um imposto cobrado pelo Estado para financiar o serviço público de rádio e de 
+televisão. O valor médio mensal da CAV é de € 2,85 + IVA. Para clientes economicamente vulneráveis a CAV tem o v alor de € 1 
++ IVA.
+Os clientes com consumo inferior a 400 kWh/ano estão isentos do pagamento de CAV.
+A Taxa DGEG é uma taxa de exploração das instalações elétricas, com um valor fixo definido por Portaria do Governo e 
+cobrado pela Direção Geral de Energia e Geologia.
+Mais informações:
+O não pagamento da fatura dentro da data limite de pagamento pode dar lugar à cobrança de juros de mora, à interrupção 
+do fornecimento e/ou à exigência de caução nos termos do contrato, da legislação e regulamentação aplicáveis, ou, quando 
+aplicável, à inibição de mudança de comercializador.
+Para informações sobre ofertas de energia elétrica consulte:
+Portal Poupa Energia da ADENE - Agência para a Energia, em https://poupaenergia.pt
+O simulador de preços de energia da Entidade Reguladora dos Serviços Energéticos ( ERSE), em 
+https://www.erse.pt/simuladores/precos-de-energia/
+O simulador de rotulagem de energia elétrica da ERSE, em https://www.erse.pt/simuladores/rotulagem/
+Para informações sobre resolução de litígios, consulte os procedimentos aplicáveis e a lista de entida des competentes 
+disponível no seu contrato de energia ou em meoenergia.pt 
+Para apresentação de reclamações, pode utilizar o Livro de Reclamações em formato eletrónico disponíve l em 
+meoenergia.pt para reclamações por escrito, o Livro de Reclamações em suporte de papel dispon ível nas lojas MEO, ou 
+através dos restantes meios de atendimento disponibilizados e identificados no seu contrato de energia.
+INFORMAÇÃO ÚTIL
+VPQd-Processado por Programa Certificado n.º 0030/AT / FT FA.ME26/1885673 | Os bens e/ou serviços foram colocados à disposição na data 2026-08-27 / © PRIMAVERA BSS / ATCUD: J6TM5VGG-1885673
+meoenergia.pt

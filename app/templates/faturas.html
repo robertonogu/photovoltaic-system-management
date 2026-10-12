@@ -5,44 +5,134 @@
 <div class="pagina-cabeca">
   <div>
     <h1>Faturas</h1>
-    <p>Opcional. Com o total de uma fatura, o painel deixa de estimar esse mês e compara a fatura verdadeira com a que pagarias sem painéis.</p>
+    <p>As faturas vão de um dia a outro, não de mês a mês. Para cada uma, a app junta os dados diários da Deye desse período exato e refaz a fatura como se não tivesses painéis, com os preços da própria fatura.</p>
   </div>
 </div>
 
-<div class="duas-colunas">
-  <section class="bloco" aria-labelledby="t-reg">
-    <div class="bloco-cabeca"><h2 id="t-reg">Registar fatura</h2></div>
+<section class="bloco" aria-labelledby="t-carregar">
+  <div class="bloco-cabeca"><h2 id="t-carregar">Adicionar faturas</h2>
+    {% if email_ativo %}<span class="etiqueta verde">Também chegam por email</span>
+    {% else %}<a class="etiqueta" href="{{ url_for('definicoes') }}#email">Receber por email</a>{% endif %}</div>
+  <form method="post" enctype="multipart/form-data" class="largar" id="largar">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label class="largar-zona">
+      {{ icone("fatura") }}
+      <b>Larga aqui os PDF das faturas da MEO Energia</b>
+      <span>ou carrega para escolher. Podes enviar várias de uma vez.</span>
+      <input type="file" name="pdf" accept="application/pdf,.pdf" multiple required>
+    </label>
+  </form>
+  <details class="manual">
+    <summary>Não tens o PDF? Escreve os valores à mão</summary>
     <form method="post" class="form">
       <input type="hidden" name="csrf" value="{{ csrf }}">
       <div class="grelha-campos">
-        <label class="campo"><span>Mês do consumo</span><input type="month" name="mes" required value="{{ mes_passado }}"></label>
+        <label class="campo"><span>Início do período</span><input type="date" name="inicio" required></label>
+        <label class="campo"><span>Fim do período</span><input type="date" name="fim" required max="{{ hoje }}"></label>
+        <label class="campo"><span>Energia faturada</span>
+          <span class="com-unidade"><input name="kwh" inputmode="decimal" required placeholder="54"><em>kWh</em></span></label>
         <label class="campo"><span>Total pago</span>
-          <span class="com-unidade"><input name="total_eur" inputmode="decimal" required placeholder="24,30"><em>€</em></span></label>
+          <span class="com-unidade"><input name="total_eur" inputmode="decimal" required placeholder="29,72"><em>€</em></span></label>
       </div>
-      <label class="campo"><span>Notas</span><input name="notas" placeholder="Opcional"></label>
-      <div><button class="botao sol">{{ icone("fatura") }} Guardar fatura</button></div>
-      <p class="campo"><small>Se esse mês já tiver fatura, é substituída.</small></p>
+      <div><button class="botao leve">Guardar fatura</button></div>
     </form>
-  </section>
+  </details>
+</section>
 
-  <section class="bloco" aria-labelledby="t-lista">
-    <div class="bloco-cabeca"><h2 id="t-lista">Registadas</h2></div>
-    {% if faturas %}
-    <ul class="lista">
-      {% for f in faturas %}
-      <li>
-        <div class="principal"><b>{{ f.mes|mes_longo|capitalize }}</b>{% if f.notas %}<small>{{ f.notas }}</small>{% endif %}</div>
-        <span class="valor">{{ f.total_eur|eur }}</span>
-        <form method="post" action="{{ url_for('apagar_fatura', mes=f.mes) }}" onsubmit="return confirm('Apagar a fatura de {{ f.mes|mes }}?')">
-          <input type="hidden" name="csrf" value="{{ csrf }}">
-          <button class="link-perigo" title="Apagar fatura">{{ icone("lixo") }}</button>
-        </form>
-      </li>
-      {% endfor %}
-    </ul>
-    {% else %}
-    <div class="vazio">{{ icone("fatura") }}<p>Quando chegar a próxima fatura, escreve aqui o total.</p></div>
+{% for f in faturas %}
+<section class="bloco fatura" aria-labelledby="f-{{ loop.index }}">
+  <div class="bloco-cabeca">
+    <div>
+      <h2 id="f-{{ loop.index }}">{{ f.inicio[8:] }}/{{ f.inicio[5:7] }} a {{ f.fim[8:] }}/{{ f.fim[5:7] }}/{{ f.fim[:4] }}</h2>
+      <p>{{ f.dias }} dias · {{ f.comercializador or 'Fatura' }}{% if f.origem != 'manual' %} · {{ f.numero }}{% else %} · escrita à mão{% endif %}
+        {% if f.origem == 'email' %}<span class="etiqueta">por email</span>{% endif %}</p>
+    </div>
+    <form method="post" action="{{ url_for('apagar_fatura', numero=f.numero) }}" onsubmit="return confirm('Apagar esta fatura?')">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="link-perigo" title="Apagar fatura">{{ icone("lixo") }}</button>
+    </form>
+  </div>
+
+  {% if f.fonte %}
+  <div class="comparacao">
+    <div class="comp-col">
+      <span class="lbl">Pagaste</span>
+      <b class="grande">{{ f.total_eur|eur }}</b>
+      <small>{{ f.kwh|kwh }} kWh da rede</small>
+    </div>
+    <div class="comp-col">
+      <span class="lbl">Sem painéis pagarias</span>
+      <b class="grande riscado">{{ f.fatura_sem|eur }}</b>
+      <small>{{ f.casa_kwh|kwh }} kWh consumidos em casa</small>
+    </div>
+    <div class="comp-col destaque">
+      <span class="lbl">Poupaste</span>
+      <b class="grande">{{ f.poupanca_eur|eur }}</b>
+      <small>{{ f.evitado_eur|eur }} na fatura + {{ f.venda_eur|eur }} de venda</small>
+    </div>
+  </div>
+  {% else %}
+  <p class="nota-texto">Ainda não há dados da Deye para este período, por isso não dá para calcular a poupança.</p>
+  {% endif %}
+
+  <details class="detalhe">
+    <summary>Ver o detalhe da fatura</summary>
+    <table>
+      <tbody>
+        <tr><td>Energia</td><td>{{ f.kwh|kwh }} kWh × {{ f.preco_kwh|num }} €</td><td>{{ f.energia_eur|eur }}</td></tr>
+        <tr><td>Potência</td><td>{{ f.dias }} dias × {{ f.potencia_eur_dia|num }} €</td><td>{{ f.potencia_eur|eur }}</td></tr>
+        <tr><td>Contribuição audiovisual</td><td></td><td>{{ f.cav_eur|eur }}</td></tr>
+        <tr><td>Imposto especial de consumo</td><td></td><td>{{ f.iec_eur|eur }}</td></tr>
+        <tr><td>Taxa DGEG</td><td></td><td>{{ f.dgeg_eur|eur }}</td></tr>
+        {% if f.iva_eur is not none %}<tr><td>IVA</td><td></td><td>{{ f.iva_eur|eur }}</td></tr>{% endif %}
+        <tr class="soma"><td>Total</td><td></td><td>{{ f.total_eur|eur }}</td></tr>
+      </tbody>
+    </table>
+    {% if f.fonte %}<p class="nota-texto">Consumo da casa calculado com os dados {{ 'diários' if f.fonte == 'diária' else 'mensais (repartidos pelos dias)' }} da Deye.</p>{% endif %}
+  </details>
+
+  <ul class="avisos-fatura">
+    {% if f.preco_diferente %}
+    <li class="sol">{{ icone("alerta") }}<span>Os preços desta fatura ({{ f.preco_kwh|num }} €/kWh, {{ f.potencia_eur_dia|num }} €/dia) não batem com o contrato em vigor.</span>
+      <form method="post" action="{{ url_for('contrato_da_fatura', numero=f.numero) }}">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="botao leve pequeno">Criar contrato com estes preços</button>
+      </form></li>
     {% endif %}
-  </section>
-</div>
+    {% if f.leitura == 'estimada' %}
+    <li>{{ icone("alerta") }}<span>Esta fatura usa uma leitura estimada; a próxima vai acertar a diferença.</span></li>
+    {% endif %}
+    {% if f.diferenca_rede and f.diferenca_rede > 0.15 %}
+    <li>{{ icone("alerta") }}<span>A fatura diz {{ f.kwh|kwh }} kWh da rede e a Deye mediu {{ f.deye_rede_kwh|kwh }} kWh. Pequenas diferenças são normais (medem em sítios diferentes e a Deye pode ter dias em falta).</span></li>
+    {% endif %}
+    {% if f.extra_vs_regulado_eur %}
+    <li>{{ icone("euro") }}<span>A própria fatura diz que no mercado regulado pagarias menos {{ f.extra_vs_regulado_eur|eur }} neste período (antes de taxas e IVA).</span></li>
+    {% endif %}
+    {% if f.kwh_vazio is not none and f.kwh and f.kwh_vazio / f.kwh > 0.5 %}
+    <li>{{ icone("energia") }}<span>{{ (f.kwh_vazio / f.kwh)|pct }} do que compraste à rede foi em horas de vazio (noite e fim de semana). Uma tarifa bi-horária podia sair mais barata.</span></li>
+    {% endif %}
+  </ul>
+</section>
+{% else %}
+<section class="bloco"><div class="vazio">{{ icone("fatura") }}<p>Ainda não há faturas. Larga aqui o PDF da última fatura da MEO Energia.</p></div></section>
+{% endfor %}
+
+{% if antigas %}
+<section class="bloco">
+  <div class="bloco-cabeca"><h2>Totais mensais antigos</h2><p>De antes das faturas por período</p></div>
+  <ul class="lista">{% for a in antigas %}<li><div class="principal"><b>{{ a.mes|mes_longo|capitalize }}</b></div><span class="valor">{{ a.total_eur|eur }}</span>
+    <form method="post" action="{{ url_for('apagar_fatura', numero=a.mes) }}"><input type="hidden" name="csrf" value="{{ csrf }}">
+    <button class="link-perigo">{{ icone("lixo") }}</button></form></li>{% endfor %}</ul>
+</section>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+  // envia logo que escolhes ou largas os ficheiros
+  const f = document.getElementById('largar'), zona = f.querySelector('.largar-zona'), inp = f.querySelector('input[type=file]');
+  inp.addEventListener('change', () => { if (inp.files.length) { zona.classList.add('a-enviar'); zona.querySelector('b').textContent = 'A ler ' + inp.files.length + (inp.files.length > 1 ? ' faturas…' : ' fatura…'); f.submit(); } });
+  ['dragenter', 'dragover'].forEach((e) => zona.addEventListener(e, (ev) => { ev.preventDefault(); zona.classList.add('por-cima'); }));
+  ['dragleave', 'drop'].forEach((e) => zona.addEventListener(e, () => zona.classList.remove('por-cima')));
+  zona.addEventListener('drop', (ev) => { ev.preventDefault(); inp.files = ev.dataTransfer.files; inp.dispatchEvent(new Event('change')); });
+</script>
 {% endblock %}

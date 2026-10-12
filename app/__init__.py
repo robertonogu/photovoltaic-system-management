@@ -12,7 +12,9 @@ from flask import (Flask, abort, flash, jsonify, redirect, render_template, requ
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from . import db, sync
-from .calc import Contrato, Impostos, calcular, resumo
+from . import faturas_meo
+from .calc import (Contrato, Impostos, calcular, calcular_periodo, em_vigor, energia_no_periodo, faturas_por_mes,
+                   resumo)
 
 MESES_LONGOS = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro",
                 "outubro", "novembro", "dezembro"]
@@ -155,7 +157,7 @@ def _criar_app() -> Flask:
     # ---------- segurança ----------
     @app.before_request
     def proteger():
-        if request.endpoint in ("login", "static", "saude", "cron_sincronizar", "criar_senha"):
+        if request.endpoint in ("login", "static", "saude", "cron_sincronizar", "criar_senha", "email_faturas"):
             return
         if not senha_definida():
             return redirect(url_for("criar_senha"))
@@ -223,6 +225,8 @@ def _criar_app() -> Flask:
             meses = con.execute("SELECT * FROM meses ORDER BY mes")
             contratos = con.execute("SELECT * FROM contratos ORDER BY desde DESC, id DESC")
             faturas = {r["mes"]: r["total_eur"] for r in con.execute("SELECT mes, total_eur FROM faturas")}
+            periodos = con.execute("SELECT * FROM faturas_periodo ORDER BY inicio")
+        faturas.update(faturas_por_mes(periodos))
         imp = Impostos(float(d["iva_reduzido"]), float(d["iva_normal"]), float(d["limite_iva_kwh_30dias"]))
         objs = [Contrato(c["tipo"], c["empresa"], c["desde"], c["preco_kwh"], c["potencia_eur_dia"] or 0,
                          c["iva_potencia"]) for c in contratos]
@@ -306,30 +310,144 @@ def _criar_app() -> Flask:
         flash("Contrato apagado.", "ok")
         return redirect(url_for("contratos"))
 
-    # ---------- faturas ----------
+    # ---------- faturas (por período, como vêm do comercializador) ----------
+    def faturas_calculadas():
+        d, meses, contratos, _, _, _ = carregar()
+        imp = Impostos(float(d["iva_reduzido"]), float(d["iva_normal"]), float(d["limite_iva_kwh_30dias"]))
+        objs = [Contrato(c["tipo"], c["empresa"], c["desde"], c["preco_kwh"], c["potencia_eur_dia"] or 0,
+                         c["iva_potencia"]) for c in contratos]
+        with db.ligar() as con:
+            lista = con.execute("SELECT * FROM faturas_periodo ORDER BY inicio DESC")
+            dias = {r["data"]: r for r in con.execute("SELECT * FROM dias")} if lista else {}
+        out = []
+        for f in lista:
+            mes_ini = f["inicio"][:7]
+            venda = em_vigor(objs, "venda", mes_ini)
+            compra = em_vigor(objs, "compra", mes_ini)
+            e = energia_no_periodo(f["inicio"], f["fim"], dias, meses)
+            r = calcular_periodo(f, e, venda, imp) if e["fonte"] else {**f, "fonte": None}
+            # o preço da fatura bate com o contrato em vigor?
+            r["contrato"] = compra.empresa if compra else None
+            r["preco_diferente"] = bool(compra) and (
+                abs((f["preco_kwh"] or 0) - compra.preco_kwh) > 0.00005
+                or abs((f["potencia_eur_dia"] or 0) - compra.potencia_eur_dia) > 0.00005)
+            out.append(r)
+        return out
+
+    def guardar_fatura_pdf(dados: bytes, origem: str) -> tuple[bool, str]:
+        try:
+            f = faturas_meo.ler_pdf(dados, db.segredo("pdf_senha"))
+        except faturas_meo.FaturaIlegivel as e:
+            return False, str(e)
+        f["origem"] = origem
+        nova = db.guardar_fatura(f)
+        aviso = "" if f.get("confere", True) else " Atenção: o IVA lido não bate certo; confirma os valores."
+        return True, (f"Fatura {f['numero']} ({f['inicio'][8:]}/{f['inicio'][5:7]} a {f['fim'][8:]}/{f['fim'][5:7]}) "
+                      + ("lida" if nova else "atualizada") + f": {f['kwh']:.0f} kWh, total {f['total_eur']:.2f} €.".replace(".", ",", 1) + aviso)
+
     @app.route("/faturas", methods=["GET", "POST"])
     def faturas():
         if request.method == "POST":
-            mes, total = request.form.get("mes", ""), _num(request.form.get("total_eur"))
-            if not RE_MES.match(mes) or total is None:
-                flash("Indica o mês e o total da fatura.", "erro")
-            else:
-                with db.ligar() as con:
-                    con.execute("INSERT INTO faturas (mes, total_eur, notas) VALUES (?,?,?) ON CONFLICT (mes) DO UPDATE "
-                                "SET total_eur = excluded.total_eur, notas = excluded.notas",
-                                (mes, total, request.form.get("notas", "").strip()))
-                flash("Fatura guardada.", "ok")
+            ficheiros = [x for x in request.files.getlist("pdf") if x and x.filename]
+            if ficheiros:
+                for x in ficheiros:
+                    ok, msg = guardar_fatura_pdf(x.read(), "pdf")
+                    flash(msg if ok else f"{x.filename}: {msg}", "ok" if ok else "erro")
+                return redirect(url_for("faturas"))
+            # fatura escrita à mão: só período, kWh e total; o resto vem do contrato
+            fm = request.form
+            inicio, fim = fm.get("inicio", ""), fm.get("fim", "")
+            total, kwh = _num(fm.get("total_eur")), _num(fm.get("kwh"))
+            if not (RE_DATA.match(inicio) and RE_DATA.match(fim)) or fim < inicio or total is None or kwh is None:
+                flash("Indica o início, o fim, os kWh e o total da fatura.", "erro")
+                return redirect(url_for("faturas"))
+            _, _, contratos, _, _, _ = carregar()
+            objs = [Contrato(c["tipo"], c["empresa"], c["desde"], c["preco_kwh"], c["potencia_eur_dia"] or 0,
+                             c["iva_potencia"]) for c in contratos]
+            compra = em_vigor(objs, "compra", inicio[:7])
+            n = (date.fromisoformat(fim) - date.fromisoformat(inicio)).days + 1
+            pot = compra.potencia_eur_dia if compra else 0
+            preco = compra.preco_kwh if compra else 0
+            db.guardar_fatura({
+                "numero": f"manual-{inicio}", "comercializador": compra.empresa if compra else None, "emitida": None,
+                "inicio": inicio, "fim": fim, "dias": n, "kwh": kwh, "preco_kwh": preco, "potencia_eur_dia": pot,
+                "energia_eur": round(kwh * preco, 2), "potencia_eur": round(pot * n, 2),
+                "cav_eur": round(2.85 * 12 / 365.25 * n, 2), "iec_eur": round(0.001 * kwh, 2), "iec_kwh": 0.001,
+                "dgeg_eur": 0.07, "outros_eur": 0, "iva_eur": None, "total_eur": total, "origem": "manual",
+            })
+            flash("Fatura guardada.", "ok")
             return redirect(url_for("faturas"))
+        token = db.segredo("email_token")
         with db.ligar() as con:
-            lista = con.execute("SELECT * FROM faturas ORDER BY mes DESC")
-        return render_template("faturas.html", faturas=lista, mes_passado=_mes_passado())
+            antigas = con.execute("SELECT * FROM faturas ORDER BY mes DESC")
+        return render_template("faturas.html", faturas=faturas_calculadas(), antigas=antigas,
+                               hoje=date.today().isoformat(), email_ativo=bool(token))
 
-    @app.post("/faturas/<mes>/apagar")
-    def apagar_fatura(mes):
+    @app.post("/faturas/<path:numero>/apagar")
+    def apagar_fatura(numero):
         with db.ligar() as con:
-            con.execute("DELETE FROM faturas WHERE mes = ?", (mes,))
+            con.execute("DELETE FROM faturas_periodo WHERE numero = ?", (numero,))
+            con.execute("DELETE FROM faturas WHERE mes = ?", (numero,))  # faturas mensais antigas
         flash("Fatura apagada.", "ok")
         return redirect(url_for("faturas"))
+
+    @app.post("/faturas/<path:numero>/criar-contrato")
+    def contrato_da_fatura(numero):
+        with db.ligar() as con:
+            f = con.um("SELECT * FROM faturas_periodo WHERE numero = ?", (numero,))
+            if f:
+                con.execute("INSERT INTO contratos (tipo, empresa, desde, preco_kwh, potencia_eur_dia, iva_potencia, notas) "
+                            "VALUES ('compra', ?, ?, ?, ?, ?, ?)",
+                            (f["comercializador"] or "MEO Energia", f["inicio"], f["preco_kwh"], f["potencia_eur_dia"] or 0,
+                             float(db.definicoes()["iva_normal"]), f"Preços da fatura {numero}"))
+        flash("Contrato criado com os preços da fatura." if f else "Fatura não encontrada.", "ok" if f else "erro")
+        return redirect(url_for("contratos"))
+
+    # ---------- faturas por email ----------
+    @app.post("/api/email/faturas/<token>")
+    def email_faturas(token):
+        """Recebe emails reencaminhados (CloudMailin, Mailgun, Postmark…) e lê os PDF em anexo."""
+        certo = db.segredo("email_token")
+        if not certo or not hmac.compare_digest(token, certo):
+            return {"ok": False}, 404
+        import base64
+        anexos, assunto, remetente, texto = [], "", "", ""
+        j = request.get_json(silent=True)
+        if j:  # formato JSON (CloudMailin "JSON normalized", Postmark)
+            h = j.get("headers") or {}
+            assunto = h.get("subject") or h.get("Subject") or j.get("Subject") or ""
+            remetente = h.get("from") or h.get("From") or j.get("From") or (j.get("envelope") or {}).get("from") or ""
+            texto = j.get("plain") or j.get("TextBody") or ""
+            for a in (j.get("attachments") or j.get("Attachments") or []):
+                nome = a.get("file_name") or a.get("Name") or ""
+                conteudo = a.get("content") or a.get("Content")
+                if conteudo and (nome.lower().endswith(".pdf") or "pdf" in (a.get("content_type") or a.get("ContentType") or "")):
+                    anexos.append((nome, base64.b64decode(conteudo)))
+        else:  # formato multipart (CloudMailin multipart, Mailgun)
+            fm = request.form
+            assunto = fm.get("headers[subject]") or fm.get("subject") or fm.get("Subject") or ""
+            remetente = fm.get("headers[from]") or fm.get("from") or fm.get("sender") or ""
+            texto = fm.get("plain") or fm.get("body-plain") or ""
+            for _, x in request.files.items(multi=True):
+                if x.filename.lower().endswith(".pdf") or x.mimetype == "application/pdf":
+                    anexos.append((x.filename, x.read()))
+        resultados = [guardar_fatura_pdf(dados, "email") for _, dados in anexos]
+        resumo_txt = "; ".join(m for _, m in resultados) or "Sem PDF em anexo."
+        with db.ligar() as con:
+            con.execute("INSERT INTO emails_recebidos (quando, remetente, assunto, resumo, resultado) VALUES (?,?,?,?,?)",
+                        (db.agora(), str(remetente)[:200], str(assunto)[:200], texto[:800], resumo_txt[:500]))
+            con.execute("DELETE FROM emails_recebidos WHERE id NOT IN (SELECT id FROM emails_recebidos ORDER BY id DESC LIMIT 20)")
+        return {"ok": True, "faturas": [m for ok, m in resultados if ok]}, 200
+
+    @app.post("/definicoes/email")
+    def ativar_email():
+        if request.form.get("acao") == "desligar":
+            db.guardar_segredo("email_token", None)
+            flash("Receção de faturas por email desligada.", "ok")
+        else:
+            db.guardar_segredo("email_token", secrets.token_urlsafe(24))
+            flash("Endereço de receção criado. Copia-o para o CloudMailin.", "ok")
+        return redirect(url_for("definicoes") + "#email")
 
     # ---------- meses (dados de energia) ----------
     @app.route("/meses", methods=["GET", "POST"])
@@ -391,7 +509,16 @@ def _criar_app() -> Flask:
         return render_template("definicoes.html", defs=db.definicoes(), ultima=sync.ultima(), teste=teste,
                                deye_origem=cred["origem"] if cred else None,
                                deye_app_id=db.segredo("deye_app_id") or "", deye_email=db.segredo("deye_email") or "",
-                               senha_por_variavel=bool(senha_env()))
+                               senha_por_variavel=bool(senha_env()),
+                               email_url=((request.url_root.rstrip("/").replace("http://", "https://", 1)
+                                           if os.environ.get("VERCEL") else request.url_root.rstrip("/"))
+                                          + url_for("email_faturas", token=db.segredo("email_token")))
+                               if db.segredo("email_token") else None,
+                               emails=emails_recentes())
+
+    def emails_recentes():
+        with db.ligar() as con:
+            return con.execute("SELECT * FROM emails_recebidos ORDER BY id DESC LIMIT 5")
 
     @app.post("/definicoes/testar-deye")
     def testar_deye():

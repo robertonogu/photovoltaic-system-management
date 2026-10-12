@@ -95,10 +95,21 @@ solar.teudominio.pt {
 
 Depois põe `COOKIE_SEGURO=1` no `.env` e reinicia. Não deixes a porta 8000 aberta para a internet, só a 443.
 
+## Faturas da MEO Energia
+
+As faturas vão de um dia a outro (ex.: 21/08 a 20/09), não de mês a mês. Para cada fatura, a app:
+
+- lê o PDF: período, kWh, preço do kWh, potência, CAV, IEC, DGEG, IVA e total (sem guardar nome, morada, NIF ou IBAN);
+- junta os dados **diários** da Deye desse período exato e refaz a fatura como se toda a energia viesse da rede;
+- avisa se o preço mudou face ao contrato (e cria o contrato novo com um clique), se a leitura foi estimada, quanto pagarias no mercado regulado e se compensaria uma tarifa bi-horária;
+- reparte o total pelos meses, para o painel mensal usar a fatura real quando o mês está todo coberto.
+
+Para as receber **por email**: em Definições → Faturas por email, liga a receção e segue os passos (um serviço como o CloudMailin transforma o email num pedido para a app; no Gmail, um filtro reencaminha os emails da MEO).
+
 ## 3. Uso no dia a dia
 
 - **Mudaste de empresa ou de preço?** Em **Contratos**, adiciona um contrato novo com a data de início. Não apagues o antigo: os meses passados continuam com o preço que tinham.
-- **Chegou a fatura?** Em **Faturas**, escreve o total desse mês.
+- **Chegou a fatura?** Larga o PDF em **Faturas** (ou deixa-a chegar por email).
 - **Investiste mais** (ex.: outra bateria)? Em **Definições**, atualiza o investimento total.
 - **Um mês está errado?** Em **Energia**, escreve-o à mão (fica fixo) ou apaga-o para voltar a vir da Deye.
 

@@ -116,3 +116,86 @@ def resumo(resultados: list[dict], investimento: float) -> dict | None:
         "ultimo_mes": ultimo["mes"] if ultimo else None,
         "ultima_poupanca": ultimo["poupanca_eur"] if ultimo else None,
     }
+
+
+# ---------------------------------------------------------------------------
+# Faturas por período (as faturas não coincidem com os meses do calendário)
+# ---------------------------------------------------------------------------
+def _datas(inicio: str, fim: str):
+    from datetime import timedelta
+    d, f = date.fromisoformat(inicio), date.fromisoformat(fim)
+    while d <= f:
+        yield d
+        d += timedelta(days=1)
+
+
+def faturas_por_mes(faturas: list[dict]) -> dict[str, float]:
+    """Reparte o total de cada fatura pelos meses, proporcionalmente aos dias.
+
+    Só devolve os meses que ficam cobertos por faturas em todos os dias; os outros continuam estimados.
+    """
+    valor: dict[str, float] = {}
+    cobertos: dict[str, set] = {}
+    for f in faturas:
+        dias = f["dias"] or 1
+        for d in _datas(f["inicio"], f["fim"]):
+            mes = d.strftime("%Y-%m")
+            valor[mes] = valor.get(mes, 0.0) + f["total_eur"] / dias
+            cobertos.setdefault(mes, set()).add(d.day)
+    out = {}
+    for mes, v in valor.items():
+        a, m = map(int, mes.split("-"))
+        if len(cobertos[mes]) == calendar.monthrange(a, m)[1]:
+            out[mes] = round(v, 2)
+    return out
+
+
+def energia_no_periodo(inicio: str, fim: str, dias: dict[str, dict], meses: list[dict]) -> dict:
+    """Consumo da casa, rede e injetado num período: pelos dados diários da Deye, ou pelos meses se faltarem dias."""
+    datas = list(_datas(inicio, fim))
+    com_dados = [dias[d.isoformat()] for d in datas if d.isoformat() in dias]
+    if datas and len(com_dados) >= 0.9 * len(datas):
+        fator = len(datas) / len(com_dados)  # completa os poucos dias em falta pela média
+        soma = lambda k: sum((x.get(k) or 0) for x in com_dados) * fator  # noqa: E731
+        return {"consumo_kwh": soma("consumo_kwh"), "rede_kwh": soma("rede_kwh"),
+                "injetado_kwh": soma("injetado_kwh"), "fonte": "diária"}
+    por_mes = {m["mes"]: m for m in meses}
+    tot = {"consumo_kwh": 0.0, "rede_kwh": 0.0, "injetado_kwh": 0.0}
+    faltam = 0
+    for d in datas:
+        m = por_mes.get(d.strftime("%Y-%m"))
+        if not m:
+            faltam += 1
+            continue
+        n = calendar.monthrange(d.year, d.month)[1]
+        for k in tot:
+            tot[k] += (m.get(k) or 0) / n
+    if faltam > 0.1 * len(datas):
+        return {**tot, "fonte": None}
+    return {**tot, "fonte": "mensal"}
+
+
+def calcular_periodo(f: dict, energia: dict, venda: Contrato | None, imp: Impostos) -> dict:
+    """Refaz a fatura como se toda a energia da casa viesse da rede, com os preços da própria fatura."""
+    casa = energia["consumo_kwh"]
+    lim = imp.limite_kwh_30dias * f["dias"] / 30
+    preco = f["preco_kwh"] or 0
+    energia_sem = preco * (min(casa, lim) * (1 + imp.iva_reduzido) + max(casa - lim, 0) * (1 + imp.iva_normal))
+    iec_sem = (f.get("iec_kwh") or 0.001) * casa * (1 + imp.iva_normal)
+    fixo = (f["potencia_eur"] + f["dgeg_eur"] + f.get("outros_eur", 0)) * (1 + imp.iva_normal) + f["cav_eur"] * (1 + imp.iva_reduzido)
+    sem = energia_sem + iec_sem + fixo
+    venda_eur = energia["injetado_kwh"] * (venda.preco_kwh if venda else 0)
+    return {
+        **f,
+        "casa_kwh": round(casa, 1),
+        "solar_kwh": round(max(casa - f["kwh"], 0), 1),
+        "deye_rede_kwh": round(energia["rede_kwh"], 1),
+        "injetado_kwh": round(energia["injetado_kwh"], 1),
+        "fonte": energia["fonte"],
+        "fatura_sem": round(sem, 2),
+        "evitado_eur": round(sem - f["total_eur"], 2),
+        "venda_eur": round(venda_eur, 2),
+        "poupanca_eur": round(sem - f["total_eur"] + venda_eur, 2),
+        # a fatura e a Deye medem a rede em sítios diferentes; mais de 15% de diferença merece atenção
+        "diferenca_rede": (abs(energia["rede_kwh"] - f["kwh"]) / f["kwh"]) if f["kwh"] else None,
+    }

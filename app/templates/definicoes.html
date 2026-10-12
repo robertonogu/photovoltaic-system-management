@@ -98,6 +98,47 @@
     {% endif %}
   </section>
 
+  <section class="bloco" id="email" aria-labelledby="t-email">
+    <div class="bloco-cabeca"><h2 id="t-email">Faturas por email</h2>
+      {% if email_url %}<span class="etiqueta verde">Ligado</span>{% else %}<span class="etiqueta">Desligado</span>{% endif %}</div>
+    {% if email_url %}
+      <p class="nota-texto" style="margin-top:0">Endereço onde a app recebe os emails (é secreto, não o partilhes):</p>
+      <div class="copiar">
+        <input id="email-url" readonly value="{{ email_url }}" onclick="this.select()">
+        <button class="botao leve pequeno" type="button" onclick="navigator.clipboard.writeText(document.getElementById('email-url').value); this.textContent='Copiado'">Copiar</button>
+      </div>
+      <ol class="passos" style="margin-top:1rem">
+        <li>Cria uma conta num serviço que transforma emails em pedidos web, por exemplo o <b>CloudMailin</b> (tem plano gratuito; confirma os limites). Ele dá-te um endereço de email.</li>
+        <li>Nesse serviço, põe o endereço acima como destino (<i>target URL</i>), no formato <b>JSON</b> ou <b>multipart</b>.</li>
+        <li>No Gmail: Definições → <b>Encaminhamento</b> → adiciona o endereço de email do serviço. O código de confirmação do Gmail aparece aqui em baixo, em <b>Emails recebidos</b>.</li>
+        <li>No Gmail, cria um filtro: <code>from:(meoenergia)</code> com anexo → <b>Encaminhar</b> para esse endereço.</li>
+      </ol>
+      {% if emails %}
+      <h3 style="margin:1.2rem 0 .3rem;font-size:1rem">Emails recebidos</h3>
+      <ul class="lista">
+        {% for e in emails %}
+        <li><div class="principal"><b>{{ e.assunto or '(sem assunto)' }}</b>
+          <small>{{ e.quando }} UTC · {{ e.remetente }}</small>
+          <small>{{ e.resultado }}</small>
+          {% if e.resumo and 'Sem PDF' in (e.resultado or '') %}<details class="detalhe"><summary>Ver o texto</summary><p class="nota-texto" style="white-space:pre-wrap">{{ e.resumo }}</p></details>{% endif %}
+        </div></li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+      <form method="post" action="{{ url_for('ativar_email') }}" class="acoes">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="botao leve pequeno" name="acao" value="novo" onclick="return confirm('Criar um endereço novo? O antigo deixa de funcionar.')">Gerar endereço novo</button>
+        <button class="botao leve pequeno" name="acao" value="desligar">Desligar</button>
+      </form>
+    {% else %}
+      <p class="nota-texto" style="margin-top:0">Reencaminha os emails da MEO Energia com a fatura em PDF e a app lê-a sozinha: período, kWh, preços, taxas e total. Só funciona se o email trouxer o PDF em anexo; se trouxer só um link, larga o PDF na página Faturas.</p>
+      <form method="post" action="{{ url_for('ativar_email') }}" class="acoes">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="botao sol" name="acao" value="novo">{{ icone("fatura") }} Ligar faturas por email</button>
+      </form>
+    {% endif %}
+  </section>
+
   {% if not senha_por_variavel %}
   <section class="bloco" aria-labelledby="t-senha">
     <div class="bloco-cabeca"><h2 id="t-senha">Palavra-passe da app</h2></div>

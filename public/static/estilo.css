@@ -291,3 +291,44 @@ input:focus { outline: 2px solid var(--foco); outline-offset: 0; border-color: t
 .passos { margin: 0; padding-left: 1.2rem; display: grid; gap: .7rem; color: var(--tinta-2); font-size: .93rem; }
 .passos b { color: var(--tinta); }
 code { font-size: .85em; background: var(--ceu-2); padding: .05rem .35rem; border-radius: 5px; }
+
+/* ---------- faturas ---------- */
+.largar-zona { display: grid; justify-items: center; gap: .35rem; text-align: center; padding: 2rem 1rem; border: 2px dashed var(--linha); border-radius: var(--r-medio); cursor: pointer; color: var(--tinta-2); background: var(--ceu); }
+.largar-zona .icone { width: 2rem; height: 2rem; color: var(--sol-forte); }
+.largar-zona b { color: var(--tinta); font-weight: 600; }
+.largar-zona span { font-size: .88rem; }
+.largar-zona input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.largar-zona:hover, .largar-zona.por-cima { border-color: var(--sol); background: var(--sol-suave); }
+.largar-zona:focus-within { outline: 2px solid var(--foco); outline-offset: 2px; }
+.largar-zona.a-enviar .icone { animation: rodar 1.2s linear infinite; }
+details.manual, details.detalhe { margin-top: 1rem; }
+details summary { cursor: pointer; color: var(--tinta-2); font-size: .9rem; font-weight: 500; }
+details summary:hover { color: var(--tinta); }
+details[open] summary { margin-bottom: .9rem; }
+.comparacao { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--linha); border-radius: var(--r-medio); overflow: hidden; }
+.comp-col { padding: 1rem 1.1rem; display: grid; gap: .15rem; align-content: start; }
+.comp-col + .comp-col { border-left: 1px solid var(--linha); }
+.comp-col .lbl { font-size: .85rem; color: var(--tinta-2); }
+.comp-col .grande { font-family: var(--f-titulo); font-size: 1.6rem; font-weight: 600; }
+.comp-col .riscado { color: var(--tinta-3); text-decoration: line-through; text-decoration-thickness: 2px; text-decoration-color: color-mix(in srgb, var(--perigo) 60%, transparent); }
+.comp-col small { color: var(--tinta-3); font-size: .8rem; }
+.comp-col.destaque { background: color-mix(in srgb, var(--ganho) 8%, transparent); }
+.comp-col.destaque .grande { color: var(--ganho); }
+@media (max-width: 640px) {
+  .comparacao { grid-template-columns: 1fr; }
+  .comp-col + .comp-col { border-left: 0; border-top: 1px solid var(--linha); }
+}
+.detalhe table td { text-align: right; }
+.detalhe table td:first-child { text-align: left; }
+.detalhe table td:nth-child(2) { color: var(--tinta-3); }
+.detalhe tr.soma td { font-weight: 600; }
+.avisos-fatura { list-style: none; margin: 1rem 0 0; padding: 0; display: grid; gap: .5rem; }
+.avisos-fatura:empty { display: none; }
+.avisos-fatura li { display: flex; flex-wrap: wrap; align-items: center; gap: .55rem .8rem; padding: .7rem .85rem; border-radius: var(--r-pequeno); background: var(--ceu); font-size: .9rem; color: var(--tinta-2); }
+.avisos-fatura li > span { flex: 1 1 20rem; }
+.avisos-fatura li .icone { color: var(--tinta-3); }
+.avisos-fatura li.sol { background: var(--sol-suave); color: var(--tinta); }
+.avisos-fatura li.sol .icone { color: var(--sol-forte); }
+.botao.pequeno { padding: .45rem .8rem; font-size: .85rem; }
+.copiar { display: flex; gap: .5rem; }
+.copiar input { font-family: ui-monospace, monospace; font-size: .8rem; }

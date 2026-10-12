@@ -67,7 +67,9 @@ def sincronizar(completo: bool = False) -> tuple[bool, str]:
         with db.ligar() as con:
             ja_tem_deye = con.um("SELECT COUNT(*) AS n FROM meses WHERE origem = 'deye'")["n"] > 0
         inicio = primeiro if (completo or not ja_tem_deye) else max(primeiro, somar_meses(_mes_atual(), -1))
-        meses = cliente().historico_mensal(inicio)
+        c = cliente()
+        meses = c.historico_mensal(inicio)
+        _guardar_dias(c, inicio)
         atualizados, mantidos = [], []
         with db.ligar() as con:
             manuais = {r["mes"] for r in con.execute("SELECT mes FROM meses WHERE origem = 'manual'")}
@@ -105,6 +107,28 @@ def sincronizar(completo: bool = False) -> tuple[bool, str]:
         return False, f"Erro inesperado: {e}"
     finally:
         _lock.release()
+
+
+def _guardar_dias(c, inicio: str) -> None:
+    """Dados diários (para as faturas, que vão de dia X a dia Y): um pedido por mês."""
+    hoje = datetime.now().date().isoformat()
+    mes = inicio
+    while mes <= _mes_atual():
+        try:
+            dias = c.historico_diario(mes, ate=hoje)
+        except DeyeErro as e:  # os dias são um extra: se falharem, os meses continuam a contar
+            log.warning("Dados diários de %s falharam: %s", mes, e)
+            dias = []
+        with db.ligar() as con:
+            for d in dias:
+                con.execute(
+                    """INSERT INTO dias (data, consumo_kwh, rede_kwh, injetado_kwh, producao_kwh, bateria_kwh, atualizado)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)
+                       ON CONFLICT (data) DO UPDATE SET consumo_kwh = excluded.consumo_kwh, rede_kwh = excluded.rede_kwh,
+                         injetado_kwh = excluded.injetado_kwh, producao_kwh = excluded.producao_kwh,
+                         bateria_kwh = excluded.bateria_kwh, atualizado = excluded.atualizado""",
+                    (d["data"], d["consumo_kwh"], d["rede_kwh"], d["injetado_kwh"], d["producao_kwh"], d["bateria_kwh"], db.agora()))
+        mes = somar_meses(mes, 1)
 
 
 def testar_ligacao() -> dict:

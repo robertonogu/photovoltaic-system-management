@@ -56,6 +56,24 @@ def _esquema(pg: bool) -> list[str]:
             producao_kwh {real}, bateria_kwh {real}, carga_bateria_kwh {real},
             origem TEXT NOT NULL DEFAULT 'deye',
             atualizado TEXT NOT NULL)""",
+        f"""CREATE TABLE IF NOT EXISTS dias (
+            data TEXT PRIMARY KEY,
+            consumo_kwh {real}, rede_kwh {real}, injetado_kwh {real}, producao_kwh {real}, bateria_kwh {real},
+            atualizado TEXT NOT NULL)""",
+        f"""CREATE TABLE IF NOT EXISTS faturas_periodo (
+            numero TEXT PRIMARY KEY,
+            comercializador TEXT, emitida TEXT,
+            inicio TEXT NOT NULL, fim TEXT NOT NULL, dias INTEGER NOT NULL,
+            kwh {real} NOT NULL, preco_kwh {real}, potencia_eur_dia {real},
+            energia_eur {real} NOT NULL DEFAULT 0, potencia_eur {real} NOT NULL DEFAULT 0,
+            cav_eur {real} NOT NULL DEFAULT 0, iec_eur {real} NOT NULL DEFAULT 0, iec_kwh {real},
+            dgeg_eur {real} NOT NULL DEFAULT 0, outros_eur {real} NOT NULL DEFAULT 0,
+            iva_eur {real}, total_eur {real} NOT NULL,
+            extra_vs_regulado_eur {real}, leitura TEXT, kwh_vazio {real},
+            origem TEXT NOT NULL DEFAULT 'pdf', recebida TEXT NOT NULL)""",
+        """CREATE TABLE IF NOT EXISTS emails_recebidos (
+            id """ + idauto + """,
+            quando TEXT NOT NULL, remetente TEXT, assunto TEXT, resumo TEXT, resultado TEXT)""",
         """CREATE TABLE IF NOT EXISTS definicoes (
             chave TEXT PRIMARY KEY,
             valor TEXT NOT NULL)""",
@@ -189,3 +207,20 @@ def guardar_definicao(chave: str, valor: str) -> None:
     with ligar() as con:
         con.execute("INSERT INTO definicoes (chave, valor) VALUES (?, ?) "
                     "ON CONFLICT (chave) DO UPDATE SET valor = excluded.valor", (chave, valor))
+
+
+CAMPOS_FATURA = ("numero", "comercializador", "emitida", "inicio", "fim", "dias", "kwh", "preco_kwh",
+                 "potencia_eur_dia", "energia_eur", "potencia_eur", "cav_eur", "iec_eur", "iec_kwh", "dgeg_eur",
+                 "outros_eur", "iva_eur", "total_eur", "extra_vs_regulado_eur", "leitura", "kwh_vazio", "origem")
+
+
+def guardar_fatura(f: dict) -> bool:
+    """Guarda (ou substitui) uma fatura pelo número. Devolve True se era nova."""
+    with ligar() as con:
+        nova = con.um("SELECT numero FROM faturas_periodo WHERE numero = ?", (f["numero"],)) is None
+        valores = [f.get(k) for k in CAMPOS_FATURA] + [agora()]
+        cols = ", ".join(CAMPOS_FATURA) + ", recebida"
+        marc = ", ".join("?" for _ in valores)
+        upd = ", ".join(f"{k} = excluded.{k}" for k in CAMPOS_FATURA if k != "numero")
+        con.execute(f"INSERT INTO faturas_periodo ({cols}) VALUES ({marc}) ON CONFLICT (numero) DO UPDATE SET {upd}", valores)
+        return nova

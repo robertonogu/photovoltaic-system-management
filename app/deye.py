@@ -93,6 +93,58 @@ class DeyeCloud:
         return meses
 
 
+    def historico_diario(self, mes: str, ate: str | None = None) -> list[dict]:
+        """Totais por dia de um mês (AAAA-MM), até ao dia 'ate' (exclusive, AAAA-MM-DD)."""
+        if not self.token:
+            self.autenticar()
+        estacao = self.estacao()
+        a, m = map(int, mes.split("-"))
+        inicio = date(a, m, 1)
+        fim = date(a + (m == 12), m % 12 + 1, 1)
+        if ate:
+            fim = min(fim, date.fromisoformat(ate))
+        if fim <= inicio:
+            return []
+        j = self._post("/station/history", {
+            "stationId": int(estacao), "granularity": 2,
+            "startAt": inicio.isoformat(), "endAt": fim.isoformat(),
+        })
+        itens = j.get("stationDataItems") or []
+        dias = []
+        for i, it in enumerate(itens):
+            d = _data_do_registo(it)
+            if d is None and len(itens) == (fim - inicio).days:
+                d = date.fromordinal(inicio.toordinal() + i)  # registos sem data vêm por ordem
+            if d is None or not (inicio <= d < fim):
+                continue
+            dias.append({
+                "data": d.isoformat(),
+                "consumo_kwh": _f(it.get("consumptionValue")), "rede_kwh": _f(it.get("purchaseValue")),
+                "injetado_kwh": _f(it.get("gridValue")), "producao_kwh": _f(it.get("generationValue")),
+                "bateria_kwh": _f(it.get("dischargeValue")),
+            })
+        return dias
+
+
+def _data_do_registo(it: dict):
+    for k in ("date", "time", "timestamp", "collectionTime"):
+        v = it.get(k)
+        if v:
+            try:
+                if isinstance(v, (int, float)):
+                    from datetime import datetime, timezone
+                    return datetime.fromtimestamp(v / (1000 if v > 1e11 else 1), timezone.utc).date()
+                return date.fromisoformat(str(v)[:10])
+            except ValueError:
+                pass
+    try:
+        if it.get("year") and it.get("month") and it.get("day"):
+            return date(int(it["year"]), int(it["month"]), int(it["day"]))
+    except (TypeError, ValueError):
+        pass
+    return None
+
+
 def _f(v):
     try:
         return float(v)
