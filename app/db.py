@@ -164,8 +164,25 @@ def _dados_iniciais(con: Ligacao) -> None:
 
 
 def definicoes() -> dict[str, str]:
+    """Definições visíveis. As chaves começadas por "_" são segredos e nunca saem daqui (ver segredo())."""
     with ligar() as con:
-        return {r["chave"]: r["valor"] for r in con.execute("SELECT chave, valor FROM definicoes")}
+        return {r["chave"]: r["valor"] for r in con.execute("SELECT chave, valor FROM definicoes")
+                if not r["chave"].startswith("_")}
+
+
+def segredo(chave: str) -> str | None:
+    with ligar() as con:
+        r = con.um("SELECT valor FROM definicoes WHERE chave = ?", ("_" + chave,))
+        return r["valor"] if r else None
+
+
+def guardar_segredo(chave: str, valor: str | None) -> None:
+    with ligar() as con:
+        if valor is None:
+            con.execute("DELETE FROM definicoes WHERE chave = ?", ("_" + chave,))
+        else:
+            con.execute("INSERT INTO definicoes (chave, valor) VALUES (?, ?) "
+                        "ON CONFLICT (chave) DO UPDATE SET valor = excluded.valor", ("_" + chave, valor))
 
 
 def guardar_definicao(chave: str, valor: str) -> None:

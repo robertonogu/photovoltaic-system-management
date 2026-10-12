@@ -14,11 +14,13 @@ class DeyeErro(Exception):
 
 
 class DeyeCloud:
-    def __init__(self, base_url: str, app_id: str, app_secret: str, login: str, password: str,
-                 station_id: str | None = None, timeout: int = 20):
+    def __init__(self, base_url: str, app_id: str, app_secret: str, login: str, password: str | None = None,
+                 station_id: str | None = None, timeout: int = 20, password_sha256: str | None = None):
         self.base = base_url.rstrip("/")
         self.app_id, self.app_secret = app_id, app_secret
-        self.login, self.password = login.strip(), password
+        self.login = login.strip()
+        # a API só precisa do SHA-256 da palavra-passe; guardamos esse e nunca a palavra-passe
+        self.password_sha256 = password_sha256 or hashlib.sha256((password or "").encode("utf-8")).hexdigest()
         self.station_id = station_id
         self.timeout = timeout
         self.token: str | None = None
@@ -39,7 +41,7 @@ class DeyeCloud:
     def autenticar(self) -> None:
         corpo = {
             "appSecret": self.app_secret,
-            "password": hashlib.sha256(self.password.encode("utf-8")).hexdigest(),
+            "password": self.password_sha256,
         }
         corpo["email" if "@" in self.login else "username"] = self.login
         j = self._post(f"/account/token?appId={self.app_id}", corpo, auth=False)

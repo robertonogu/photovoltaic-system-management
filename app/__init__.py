@@ -6,9 +6,10 @@ import logging
 import os
 import re
 import secrets
-from datetime import date
+from datetime import date, datetime, timedelta
 
 from flask import (Flask, abort, flash, jsonify, redirect, render_template, request, session, url_for)
+from werkzeug.security import check_password_hash, generate_password_hash
 
 from . import db, sync
 from .calc import Contrato, Impostos, calcular, resumo
@@ -25,10 +26,6 @@ def create_app() -> Flask:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     faltas = []
     if os.environ.get("VERCEL"):
-        if not os.environ.get("SECRET_KEY"):
-            faltas.append(("SECRET_KEY", "Um texto aleatório comprido (40+ caracteres)."))
-        if not os.environ.get("APP_PASSWORD"):
-            faltas.append(("APP_PASSWORD", "A palavra-passe para entrares na app."))
         if not db.usa_postgres():
             faltas.append(("DATABASE_URL", "A base de dados: em Storage, cria uma Neon (Postgres) e liga-a a este projeto."))
     if faltas:
@@ -49,8 +46,8 @@ def _app_por_configurar(faltas, erro):
     def configurar(caminho):
         from markupsafe import escape
         itens = "".join(f"<li><code>{escape(n)}</code> — {escape(d)}</li>" for n, d in faltas)
-        corpo = (f"<p>Falta configurar na Vercel (Settings → Environment Variables):</p><ul>{itens}</ul>"
-                 "<p>Depois de adicionar, faz <b>Deployments → ⋯ → Redeploy</b>.</p>") if faltas else (
+        corpo = (f"<p>Falta ligar a base de dados ao projeto na Vercel:</p><ul>{itens}</ul>"
+                 "<p>Depois, faz <b>Deployments → ⋯ → Redeploy</b>.</p>") if faltas else (
                  f"<p>A app não conseguiu arrancar:</p><pre>{escape(texto)}</pre>")
         html = ("<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
                 "<title>Poupança solar — configuração</title>"
@@ -66,12 +63,28 @@ def _criar_app() -> Flask:
     # os estáticos estão em public/static: a Vercel serve-os pela CDN, e o Flask serve-os no Docker
     publico = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "public", "static")
     app = Flask(__name__, static_folder=publico, static_url_path="/static")
-    app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
     app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
                       SESSION_COOKIE_SECURE=na_vercel or os.environ.get("COOKIE_SEGURO", "0") == "1")
     db.iniciar()
+    # chave das sessões: da variável SECRET_KEY, ou gerada uma vez e guardada na base de dados
+    chave = os.environ.get("SECRET_KEY") or db.segredo("secret_key")
+    if not chave:
+        chave = secrets.token_urlsafe(48)
+        db.guardar_segredo("secret_key", chave)
+    app.secret_key = chave
     sync.iniciar_agendador()
-    senha = os.environ.get("APP_PASSWORD", "")
+
+    def senha_env() -> str:
+        return os.environ.get("APP_PASSWORD", "")
+
+    def senha_definida() -> bool:
+        return bool(senha_env() or db.segredo("senha_hash"))
+
+    def senha_certa(tentativa: str) -> bool:
+        if senha_env():
+            return hmac.compare_digest(tentativa, senha_env())
+        h = db.segredo("senha_hash")
+        return bool(h) and check_password_hash(h, tentativa)
 
     # ---------- formatação ----------
     @app.template_filter("eur")
@@ -142,9 +155,11 @@ def _criar_app() -> Flask:
     # ---------- segurança ----------
     @app.before_request
     def proteger():
-        if request.endpoint in ("login", "static", "saude", "cron_sincronizar"):
+        if request.endpoint in ("login", "static", "saude", "cron_sincronizar", "criar_senha"):
             return
-        if senha and not session.get("ok"):
+        if not senha_definida():
+            return redirect(url_for("criar_senha"))
+        if not session.get("ok"):
             return redirect(url_for("login", next=request.path))
         if request.method == "POST":
             token = request.form.get("csrf") or request.headers.get("X-CSRF")
@@ -155,22 +170,42 @@ def _criar_app() -> Flask:
     def contexto():
         if "csrf" not in session:
             session["csrf"] = secrets.token_hex(16)
-        return {"csrf": session["csrf"], "com_senha": bool(senha), "deye_ok": sync.configurado()}
+        return {"csrf": session["csrf"], "com_senha": True, "deye_ok": sync.configurado()}
+
+    @app.route("/criar-senha", methods=["GET", "POST"])
+    def criar_senha():
+        """Primeira visita: escolher a palavra-passe da app (fica guardada só como hash)."""
+        if senha_definida():
+            return redirect(url_for("login"))
+        erro = None
+        if request.method == "POST":
+            s1, s2 = request.form.get("senha", ""), request.form.get("senha2", "")
+            if len(s1) < 8:
+                erro = "Usa pelo menos 8 caracteres."
+            elif s1 != s2:
+                erro = "As duas palavras-passe não são iguais."
+            else:
+                db.guardar_segredo("senha_hash", generate_password_hash(s1))
+                session.clear()
+                session["ok"] = True
+                session.permanent = True
+                return redirect(url_for("definicoes"))
+        return render_template("login.html", erro=erro, criar=True)
 
     @app.route("/login", methods=["GET", "POST"])
     def login():
-        if not senha:
-            return redirect(url_for("painel"))
+        if not senha_definida():
+            return redirect(url_for("criar_senha"))
         erro = None
         if request.method == "POST":
-            if hmac.compare_digest(request.form.get("senha", ""), senha):
+            if senha_certa(request.form.get("senha", "")):
                 session.clear()
                 session["ok"] = True
                 session.permanent = True
                 destino = request.args.get("next", "/")
                 return redirect(destino if destino.startswith("/") and not destino.startswith("//") else "/")
             erro = "Palavra-passe errada."
-        return render_template("login.html", erro=erro)
+        return render_template("login.html", erro=erro, criar=False)
 
     @app.route("/logout", methods=["POST"])
     def logout():
@@ -207,10 +242,21 @@ def _criar_app() -> Flask:
 
     @app.get("/api/cron/sincronizar")
     def cron_sincronizar():
-        """Chamado pelo cron job da Vercel uma vez por dia, com Authorization: Bearer CRON_SECRET."""
+        """Chamado pelo cron job da Vercel uma vez por dia.
+
+        Com CRON_SECRET definido, exige Authorization: Bearer CRON_SECRET. Sem ele, aceita o cron da Vercel
+        mas no máximo uma vez a cada 6 horas (o pior que alguém de fora consegue é uma atualização a mais).
+        """
         segredo = os.environ.get("CRON_SECRET", "")
-        if not segredo or not hmac.compare_digest(request.headers.get("Authorization", ""), f"Bearer {segredo}"):
-            return {"ok": False, "erro": "não autorizado"}, 401
+        if segredo:
+            if not hmac.compare_digest(request.headers.get("Authorization", ""), f"Bearer {segredo}"):
+                return {"ok": False, "erro": "não autorizado"}, 401
+        else:
+            if "vercel-cron" not in request.headers.get("User-Agent", ""):
+                return {"ok": False, "erro": "não autorizado"}, 401
+            u = sync.ultima()
+            if u and u["ok"] and u["quando"] > (datetime.utcnow() - timedelta(hours=6)).strftime("%Y-%m-%d %H:%M:%S"):
+                return {"ok": True, "mensagem": "Já atualizado há pouco."}, 200
         ok, msg = sync.sincronizar()
         return {"ok": ok, "mensagem": msg}, 200 if ok else 500
 
@@ -338,11 +384,59 @@ def _criar_app() -> Flask:
             flash("Definições guardadas." if not erros else "Alguns valores não eram válidos e não foram guardados.",
                   "ok" if not erros else "erro")
             return redirect(url_for("definicoes"))
-        return render_template("definicoes.html", defs=db.definicoes(), ultima=sync.ultima(), teste=None)
+        return pagina_definicoes(None)
+
+    def pagina_definicoes(teste):
+        cred = sync.credenciais()
+        return render_template("definicoes.html", defs=db.definicoes(), ultima=sync.ultima(), teste=teste,
+                               deye_origem=cred["origem"] if cred else None,
+                               deye_app_id=db.segredo("deye_app_id") or "", deye_email=db.segredo("deye_email") or "",
+                               senha_por_variavel=bool(senha_env()))
 
     @app.post("/definicoes/testar-deye")
     def testar_deye():
-        return render_template("definicoes.html", defs=db.definicoes(), ultima=sync.ultima(), teste=sync.testar_ligacao())
+        return pagina_definicoes(sync.testar_ligacao())
+
+    @app.post("/definicoes/deye")
+    def guardar_deye():
+        f = request.form
+        if f.get("acao") == "apagar":
+            for k in ("app_id", "app_secret", "email", "password_sha256"):
+                db.guardar_segredo("deye_" + k, None)
+            flash("Dados da Deye apagados da app.", "ok")
+            return redirect(url_for("definicoes"))
+        app_id, email = f.get("app_id", "").strip(), f.get("email", "").strip()
+        app_secret, password = f.get("app_secret", "").strip(), f.get("password", "")
+        if not app_id or not email:
+            flash("Preenche o App ID e o email da Deye.", "erro")
+            return redirect(url_for("definicoes"))
+        if not app_secret and not db.segredo("deye_app_secret"):
+            flash("Falta o App Secret.", "erro")
+            return redirect(url_for("definicoes"))
+        if not password and not db.segredo("deye_password_sha256"):
+            flash("Falta a palavra-passe da Deye.", "erro")
+            return redirect(url_for("definicoes"))
+        db.guardar_segredo("deye_app_id", app_id)
+        db.guardar_segredo("deye_email", email)
+        if app_secret:
+            db.guardar_segredo("deye_app_secret", app_secret)
+        if password:  # só guardamos o SHA-256, que é o que a Deye pede
+            import hashlib
+            db.guardar_segredo("deye_password_sha256", hashlib.sha256(password.encode("utf-8")).hexdigest())
+        return pagina_definicoes(sync.testar_ligacao())
+
+    @app.post("/definicoes/senha")
+    def mudar_senha():
+        if senha_env():
+            flash("A palavra-passe está definida na variável APP_PASSWORD do servidor; muda-a lá.", "erro")
+        elif not senha_certa(request.form.get("atual", "")):
+            flash("A palavra-passe atual não está certa.", "erro")
+        elif len(request.form.get("nova", "")) < 8:
+            flash("A nova palavra-passe precisa de pelo menos 8 caracteres.", "erro")
+        else:
+            db.guardar_segredo("senha_hash", generate_password_hash(request.form["nova"]))
+            flash("Palavra-passe mudada.", "ok")
+        return redirect(url_for("definicoes"))
 
     return app
 

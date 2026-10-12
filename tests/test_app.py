@@ -234,7 +234,7 @@ def test_vercel_mostra_o_que_falta(monkeypatch, tmp_path):
     from app import create_app
     r = create_app().test_client().get("/")
     html = r.get_data(as_text=True)
-    assert r.status_code == 503 and "SECRET_KEY" in html and "DATABASE_URL" in html and "APP_PASSWORD" in html
+    assert r.status_code == 503 and "DATABASE_URL" in html and "SECRET_KEY" not in html
 
 
 def test_bd_com_prefixo(monkeypatch):
@@ -279,3 +279,38 @@ def test_testar_ligacao(cliente):
     entrar(c)
     html = c.post("/definicoes/testar-deye", data={"csrf": csrf(c)}).get_data(as_text=True)
     assert "Ligação a funcionar" in html and "Casa" in html
+
+
+def test_sem_variaveis_cria_senha_e_deye_pela_app(cliente, monkeypatch):
+    c = cliente
+    for k in ("APP_PASSWORD", "DEYE_APP_ID", "DEYE_APP_SECRET", "DEYE_EMAIL", "DEYE_PASSWORD", "CRON_SECRET"):
+        monkeypatch.delenv(k, raising=False)
+    # 1.ª visita: pede para criar a palavra-passe
+    r = c.get("/")
+    assert r.status_code == 302 and "/criar-senha" in r.headers["Location"]
+    assert "As duas" in c.post("/criar-senha", data={"senha": "abcdefgh", "senha2": "outra123"}).get_data(as_text=True)
+    assert c.post("/criar-senha", data={"senha": "abcdefgh", "senha2": "abcdefgh"}).status_code == 302
+    assert c.get("/").status_code == 200
+    # depois de criada, já não se pode criar outra
+    assert c.post("/criar-senha", data={"senha": "zzzzzzzz", "senha2": "zzzzzzzz"}).status_code == 302
+    c.post("/logout", data={"csrf": csrf(c)})
+    assert c.post("/login", data={"senha": "zzzzzzzz"}).status_code == 200  # errada
+    assert c.post("/login", data={"senha": "abcdefgh"}).status_code == 302
+
+    # Deye pelo formulário
+    t = csrf(c, "/definicoes")
+    html = c.post("/definicoes/deye", data={"csrf": t, "app_id": "id", "app_secret": "s", "email": "eu@x.pt",
+                                            "password": "pw", "acao": "guardar"}).get_data(as_text=True)
+    assert "Ligação a funcionar" in html
+    import hashlib
+    from app import db
+    assert db.segredo("deye_password_sha256") == hashlib.sha256(b"pw").hexdigest()
+    dados = json.dumps(c.get("/api/dados").get_json())
+    assert "senha_hash" not in dados and "deye_app_secret" not in dados and "secret_key" not in dados
+    r = c.post("/sincronizar", data={"csrf": t}, follow_redirects=True)
+    assert "Atualizado da Deye" in r.get_data(as_text=True)
+
+    # cron da Vercel sem CRON_SECRET: só com o user-agent do cron, e no máximo de 6 em 6 horas
+    assert c.get("/api/cron/sincronizar").status_code == 401
+    r = c.get("/api/cron/sincronizar", headers={"User-Agent": "vercel-cron/1.0"})
+    assert r.status_code == 200 and "há pouco" in r.get_json()["mensagem"]

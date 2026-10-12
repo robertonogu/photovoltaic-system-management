@@ -10,6 +10,18 @@
 <body class="login-pagina">
   <form method="post" class="login-caixa">
     {{ sol_logo() }}
+    {% if criar %}
+    <div>
+      <h1>Bem-vindo</h1>
+      <p>Escolhe a palavra-passe para entrar na app. Vais usá-la sempre que abrires a Poupança solar.</p>
+    </div>
+    <label class="campo"><span>Palavra-passe</span>
+      <input type="password" name="senha" autofocus required minlength="8" autocomplete="new-password"></label>
+    <label class="campo"><span>Repete a palavra-passe</span>
+      <input type="password" name="senha2" required minlength="8" autocomplete="new-password"></label>
+    {% if erro %}<p class="erro-txt" role="alert">{{ erro }}</p>{% endif %}
+    <button class="botao sol">Criar palavra-passe e entrar</button>
+    {% else %}
     <div>
       <h1>Poupança solar</h1>
       <p>Entra para ver quanto o sol já te poupou.</p>
@@ -18,6 +30,7 @@
       <input type="password" name="senha" autofocus required autocomplete="current-password"></label>
     {% if erro %}<p class="erro-txt" role="alert">{{ erro }}</p>{% endif %}
     <button class="botao sol">Entrar</button>
+    {% endif %}
   </form>
 </body>
 </html>

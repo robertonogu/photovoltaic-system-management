@@ -15,17 +15,35 @@ log = logging.getLogger("sync")
 _lock = threading.Lock()
 
 
+def credenciais() -> dict | None:
+    """Credenciais da Deye: primeiro das variáveis de ambiente, senão as guardadas em Definições."""
+    e = os.environ
+    if all(e.get(k) for k in ("DEYE_APP_ID", "DEYE_APP_SECRET", "DEYE_EMAIL", "DEYE_PASSWORD")):
+        return {"app_id": e["DEYE_APP_ID"], "app_secret": e["DEYE_APP_SECRET"], "login": e["DEYE_EMAIL"],
+                "password": e["DEYE_PASSWORD"], "origem": "variaveis"}
+    try:
+        g = {k: db.segredo("deye_" + k) for k in ("app_id", "app_secret", "email", "password_sha256")}
+    except Exception:  # noqa: BLE001 — BD ainda não pronta
+        return None
+    if all(g.values()):
+        return {"app_id": g["app_id"], "app_secret": g["app_secret"], "login": g["email"],
+                "password_sha256": g["password_sha256"], "origem": "app"}
+    return None
+
+
 def configurado() -> bool:
-    return all(os.environ.get(k) for k in ("DEYE_APP_ID", "DEYE_APP_SECRET", "DEYE_EMAIL", "DEYE_PASSWORD"))
+    return credenciais() is not None
 
 
 def cliente() -> DeyeCloud:
-    e = os.environ
+    c = credenciais()
+    if not c:
+        raise DeyeErro("A ligação à Deye não está configurada.")
     return DeyeCloud(
-        base_url=e.get("DEYE_BASE_URL", "https://eu1-developer.deyecloud.com/v1.0"),
-        app_id=e["DEYE_APP_ID"], app_secret=e["DEYE_APP_SECRET"],
-        login=e["DEYE_EMAIL"], password=e["DEYE_PASSWORD"],
-        station_id=e.get("DEYE_STATION_ID") or None,
+        base_url=os.environ.get("DEYE_BASE_URL", "https://eu1-developer.deyecloud.com/v1.0"),
+        app_id=c["app_id"], app_secret=c["app_secret"], login=c["login"],
+        password=c.get("password"), password_sha256=c.get("password_sha256"),
+        station_id=os.environ.get("DEYE_STATION_ID") or None,
     )
 
 
@@ -41,7 +59,7 @@ def sincronizar(completo: bool = False) -> tuple[bool, str]:
     (também acontece sozinho na primeira vez).
     """
     if not configurado():
-        return False, "A ligação à Deye não está configurada (faltam as variáveis DEYE_*)."
+        return False, "A ligação à Deye não está configurada. Preenche os dados em Definições."
     if not _lock.acquire(blocking=False):
         return False, "Já está a decorrer uma atualização."
     try:
@@ -92,7 +110,7 @@ def sincronizar(completo: bool = False) -> tuple[bool, str]:
 def testar_ligacao() -> dict:
     """Entra na Deye e devolve as instalações e os totais do mês anterior, sem gravar nada."""
     if not configurado():
-        return {"ok": False, "erro": "Faltam as variáveis DEYE_APP_ID, DEYE_APP_SECRET, DEYE_EMAIL e DEYE_PASSWORD."}
+        return {"ok": False, "erro": "Preenche primeiro os dados da Deye em Definições."}
     try:
         c = cliente()
         c.autenticar()
