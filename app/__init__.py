@@ -214,6 +214,18 @@ def _criar_app() -> Flask:
         session.clear()
         return redirect(url_for("login"))
 
+    @app.errorhandler(500)
+    def erro_interno(e):
+        orig = getattr(e, "original_exception", None) or e
+        logging.getLogger("app").error("Erro em %s: %r", request.path, orig)
+        texto = re.sub(r"postgres(ql)?://\S+", "postgres://…", f"{type(orig).__name__}: {orig}")[:400]
+        from markupsafe import escape
+        return (f"<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
+                f"<body style='font:16px/1.5 system-ui;max-width:40rem;margin:3rem auto;padding:0 1rem;color:#14233a'>"
+                f"<h1>Algo correu mal</h1><p>A página <code>{escape(request.path)}</code> deu um erro:</p>"
+                f"<pre style='white-space:pre-wrap;background:#eef3f8;padding:1rem;border-radius:8px'>{escape(texto)}</pre>"
+                f"<p>Copia esta mensagem e envia-a. <a href='/'>Voltar ao painel</a></p></body>"), 500
+
     @app.route("/saude")
     def saude():
         return {"ok": True}
@@ -339,6 +351,9 @@ def _criar_app() -> Flask:
             f = faturas_meo.ler_pdf(dados, db.segredo("pdf_senha"))
         except faturas_meo.FaturaIlegivel as e:
             return False, str(e)
+        except Exception as e:  # noqa: BLE001
+            logging.getLogger("faturas").exception("Falha a ler PDF")
+            return False, f"Não consegui ler o PDF ({type(e).__name__}: {e})."
         f["origem"] = origem
         nova = db.guardar_fatura(f)
         aviso = "" if f.get("confere", True) else " Atenção: o IVA lido não bate certo; confirma os valores."
