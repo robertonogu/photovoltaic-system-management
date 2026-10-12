@@ -11,9 +11,15 @@ from datetime import datetime, timezone
 
 
 def url_postgres() -> str | None:
-    for k in ("DATABASE_URL", "POSTGRES_URL"):
-        v = os.environ.get(k)
-        if v and v.startswith(("postgres://", "postgresql://")):
+    """A ligação ao Postgres. A Vercel/Neon pode dar-lhe vários nomes (com ou sem prefixo)."""
+    preferidas = ("DATABASE_URL", "POSTGRES_URL", "NEON_DATABASE_URL")
+    candidatas = [k for k in preferidas if k in os.environ] + sorted(
+        k for k in os.environ
+        if k.endswith(("DATABASE_URL", "POSTGRES_URL")) and "UNPOOLED" not in k and "NON_POOLING" not in k
+        and k not in preferidas)
+    for k in candidatas:
+        v = os.environ.get(k, "")
+        if v.startswith(("postgres://", "postgresql://")):
             return v
     return None
 

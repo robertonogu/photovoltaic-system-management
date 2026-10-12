@@ -226,14 +226,34 @@ def test_estaticos(cliente):
     assert c.get("/static/chart.umd.min.js").status_code == 200
 
 
-def test_vercel_exige_secret_key(monkeypatch, tmp_path):
+def test_vercel_mostra_o_que_falta(monkeypatch, tmp_path):
     monkeypatch.setenv("VERCEL", "1")
-    monkeypatch.delenv("SECRET_KEY", raising=False)
-    monkeypatch.delenv("DATABASE_URL", raising=False)
+    for k in ("SECRET_KEY", "DATABASE_URL", "POSTGRES_URL", "APP_PASSWORD"):
+        monkeypatch.delenv(k, raising=False)
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     from app import create_app
-    with pytest.raises(RuntimeError):
-        create_app()
+    r = create_app().test_client().get("/")
+    html = r.get_data(as_text=True)
+    assert r.status_code == 503 and "SECRET_KEY" in html and "DATABASE_URL" in html and "APP_PASSWORD" in html
+
+
+def test_bd_com_prefixo(monkeypatch):
+    from app import db
+    for k in ("DATABASE_URL", "POSTGRES_URL"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("STORAGE_DATABASE_URL_UNPOOLED", "postgresql://x@h/unpooled")
+    monkeypatch.setenv("STORAGE_DATABASE_URL", "postgresql://x@h/db")
+    assert db.url_postgres() == "postgresql://x@h/db"
+
+
+def test_erro_ao_arrancar_nao_mostra_senha(monkeypatch, tmp_path):
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.setenv("SECRET_KEY", "x" * 40)
+    monkeypatch.setenv("APP_PASSWORD", "p")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:SEGREDO@127.0.0.1:1/nada")
+    from app import create_app
+    html = create_app().test_client().get("/").get_data(as_text=True)
+    assert "não conseguiu arrancar" in html and "SEGREDO" not in html
 
 
 def test_diario_so_le_mes_atual_e_anterior(cliente):

@@ -21,13 +21,51 @@ RE_DATA = re.compile(r"^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$")
 
 
 def create_app() -> Flask:
+    """Cria a app. Se faltar configuração na Vercel, mostra uma página a dizer o quê, em vez de um erro 500."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
+    faltas = []
+    if os.environ.get("VERCEL"):
+        if not os.environ.get("SECRET_KEY"):
+            faltas.append(("SECRET_KEY", "Um texto aleatório comprido (40+ caracteres)."))
+        if not os.environ.get("APP_PASSWORD"):
+            faltas.append(("APP_PASSWORD", "A palavra-passe para entrares na app."))
+        if not db.usa_postgres():
+            faltas.append(("DATABASE_URL", "A base de dados: em Storage, cria uma Neon (Postgres) e liga-a a este projeto."))
+    if faltas:
+        return _app_por_configurar(faltas, None)
+    try:
+        return _criar_app()
+    except Exception as e:  # noqa: BLE001 — mostrar a causa em vez de um 500 sem explicação
+        logging.getLogger("app").exception("Falha ao arrancar")
+        return _app_por_configurar([], f"{type(e).__name__}: {e}")
+
+
+def _app_por_configurar(faltas, erro):
+    app = Flask(__name__)
+    texto = re.sub(r"postgres(ql)?://\S+", "postgres://…", erro or "")  # nunca mostrar a ligação com a senha
+
+    @app.route("/", defaults={"caminho": ""})
+    @app.route("/<path:caminho>")
+    def configurar(caminho):
+        from markupsafe import escape
+        itens = "".join(f"<li><code>{escape(n)}</code> — {escape(d)}</li>" for n, d in faltas)
+        corpo = (f"<p>Falta configurar na Vercel (Settings → Environment Variables):</p><ul>{itens}</ul>"
+                 "<p>Depois de adicionar, faz <b>Deployments → ⋯ → Redeploy</b>.</p>") if faltas else (
+                 f"<p>A app não conseguiu arrancar:</p><pre>{escape(texto)}</pre>")
+        html = ("<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
+                "<title>Poupança solar — configuração</title>"
+                "<body style='font:16px/1.5 system-ui;max-width:40rem;margin:3rem auto;padding:0 1rem;color:#14233a'>"
+                f"<h1>☀️ Quase pronto</h1>{corpo}</body>")
+        return html, 503
+
+    return app
+
+
+def _criar_app() -> Flask:
     na_vercel = bool(os.environ.get("VERCEL"))
     # os estáticos estão em public/static: a Vercel serve-os pela CDN, e o Flask serve-os no Docker
     publico = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "public", "static")
     app = Flask(__name__, static_folder=publico, static_url_path="/static")
-    if na_vercel and not os.environ.get("SECRET_KEY"):
-        raise RuntimeError("Falta a variável SECRET_KEY nas definições do projeto na Vercel.")
     app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
     app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
                       SESSION_COOKIE_SECURE=na_vercel or os.environ.get("COOKIE_SEGURO", "0") == "1")
