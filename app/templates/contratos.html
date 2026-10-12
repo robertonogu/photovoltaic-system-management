@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% from "icones.html" import icone %}
+{% block titulo %}Contratos · Poupança solar{% endblock %}
+{% block conteudo %}
+<div class="pagina-cabeca">
+  <div>
+    <h1>Contratos</h1>
+    <p>Cada mês usa o contrato de compra e o de venda que estavam em vigor nesse mês. Quando mudares de empresa ou de preço, adiciona um contrato novo com a data de início. Os meses anteriores ficam com o preço antigo.</p>
+  </div>
+</div>
+
+<div class="duas-colunas">
+  <section class="bloco" aria-labelledby="t-novo">
+    <div class="bloco-cabeca"><h2 id="t-novo">Novo contrato</h2></div>
+    <form method="post" class="form">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <div class="segmentos" role="radiogroup" aria-label="Tipo de contrato">
+        <label><input type="radio" name="tipo" value="compra" checked>{{ icone("rede") }} Compra de energia</label>
+        <label><input type="radio" name="tipo" value="venda">{{ icone("venda") }} Venda do excedente</label>
+      </div>
+      <label class="campo"><span>Empresa</span><input name="empresa" required placeholder="MEO Energia" autocomplete="organization"></label>
+      <label class="campo"><span>Começa em</span><input type="date" name="desde" required value="{{ hoje }}"></label>
+      <div class="grelha-campos">
+        <label class="campo"><span>Preço do kWh</span>
+          <span class="com-unidade"><input name="preco_kwh" inputmode="decimal" required placeholder="0,1499"><em>€ s/ IVA</em></span></label>
+        <label class="campo so-compra"><span>Potência</span>
+          <span class="com-unidade"><input name="potencia_eur_dia" inputmode="decimal" placeholder="0,47"><em>€/dia</em></span></label>
+      </div>
+      <label class="campo so-compra"><span>IVA da potência</span>
+        <span class="com-unidade"><input name="iva_potencia" inputmode="decimal" value="23"><em>%</em></span></label>
+      <label class="campo"><span>Notas</span><input name="notas" placeholder="Opcional, por exemplo: simples 5,75 kVA"></label>
+      <div><button class="botao sol">{{ icone("mais") }} Adicionar contrato</button></div>
+    </form>
+  </section>
+
+  <section class="bloco" aria-labelledby="t-hist">
+    <div class="bloco-cabeca"><h2 id="t-hist">Histórico</h2><p>Do mais recente para o mais antigo</p></div>
+    {% if contratos %}
+    <ol class="linha-tempo">
+      {% for c in contratos %}
+      <li class="lt-item {{ c.tipo }} {{ 'ativo' if c.id in ativos }}">
+        <span class="lt-ponto">{{ icone("rede" if c.tipo == "compra" else "venda") }}</span>
+        <div class="lt-corpo">
+          <h3>{{ c.empresa }}
+            {% if c.id in ativos %}<span class="etiqueta {{ 'sol' if c.tipo == 'compra' else 'verde' }}">Em vigor</span>{% endif %}</h3>
+          <p>{{ 'Compra' if c.tipo == 'compra' else 'Venda' }} desde {{ c.desde[8:10] }}/{{ c.desde[5:7] }}/{{ c.desde[:4] }}{% if c.notas %}. {{ c.notas }}{% endif %}</p>
+          <div class="lt-precos">
+            <span><b>{{ c.preco_kwh|num }}</b> €/kWh</span>
+            {% if c.tipo == 'compra' and c.potencia_eur_dia %}<span><b>{{ c.potencia_eur_dia|num(2) }}</b> €/dia de potência</span>{% endif %}
+          </div>
+        </div>
+        <form method="post" action="{{ url_for('apagar_contrato', cid=c.id) }}"
+              onsubmit="return confirm('Apagar o contrato com {{ c.empresa|e }}? Os meses em que estava em vigor passam a usar outro contrato.')">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <button class="link-perigo" title="Apagar contrato">{{ icone("lixo") }}</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ol>
+    {% else %}
+    <div class="vazio">{{ icone("contrato") }}<p>Adiciona o teu contrato de compra para o painel saber quanto custa cada kWh.</p></div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  const mostrar = () => {
+    const venda = document.querySelector('input[name=tipo]:checked').value === 'venda';
+    document.querySelectorAll('.so-compra').forEach((el) => { el.hidden = venda; });
+    document.querySelector('input[name=empresa]').placeholder = venda ? 'Quem compra o excedente' : 'MEO Energia';
+    document.querySelector('input[name=preco_kwh]').placeholder = venda ? '0,06' : '0,1499';
+  };
+  document.querySelectorAll('input[name=tipo]').forEach((r) => r.addEventListener('change', mostrar));
+  mostrar();
+</script>
+{% endblock %}

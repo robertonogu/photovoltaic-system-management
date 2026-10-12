@@ -1,0 +1,253 @@
+{% extends "base.html" %}
+{% from "icones.html" import icone %}
+{% block conteudo %}
+
+{% macro botao_sync() -%}
+<form method="post" action="{{ url_for('sincronizar') }}" data-sync>
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <button class="botao leve" {{ 'disabled' if not deye_ok }}>{{ icone("atualizar") }} Atualizar da Deye</button>
+</form>
+<span class="estado-sync">
+  {% if not deye_ok %}<span class="ponto nada"></span> Ligação à Deye por configurar
+  {% elif ultima %}<span class="ponto {{ '' if ultima.ok else 'mau' }}"></span>
+    {{ 'Atualizado' if ultima.ok else 'Falhou' }} a {{ ultima.quando[8:10] }}/{{ ultima.quando[5:7] }} às {{ ultima.quando[11:16] }} UTC
+  {% else %}<span class="ponto nada"></span> Ainda não sincronizado{% endif %}
+</span>
+{%- endmacro %}
+
+{% if not rsm %}
+<section class="heroi">
+  <div class="heroi-texto">
+    <h1 class="heroi-titulo">Ainda não há meses para contar.</h1>
+    <p class="heroi-sub">Vai buscar os dados à Deye ou escreve o primeiro mês à mão.</p>
+    <div class="heroi-acoes">
+      {{ botao_sync() }}
+      <a class="botao" href="{{ url_for('meses') }}">{{ icone("mais") }} Escrever um mês</a>
+    </div>
+  </div>
+</section>
+{% else %}
+
+{% set p = [rsm.recuperado, 1]|min %}
+{% set sx, sy = ponto_arco(p) %}
+<section class="heroi" aria-labelledby="titulo-heroi">
+  <div class="heroi-texto">
+    <h1 class="heroi-titulo" id="titulo-heroi">
+      {% if rsm.previsao == 'pago' %}O sistema já se pagou.
+      {% else %}O sistema já pagou {{ rsm.recuperado|pct }} de si próprio.{% endif %}
+    </h1>
+    <p class="heroi-sub">
+      Poupaste <strong>{{ rsm.total|eur }}</strong> desde {{ rsm.inicio|so_mes }}.
+      {% if rsm.previsao and rsm.previsao != 'pago' %}
+      A este ritmo fica pago em <strong>{{ rsm.previsao|mes_longo }}</strong>, daqui a {{ rsm.meses_faltam|duracao }}.
+      {% endif %}
+    </p>
+    <div class="heroi-acoes">{{ botao_sync() }}</div>
+  </div>
+
+  <div class="heroi-arco">
+    <svg class="arco" viewBox="0 0 440 290" role="img"
+         aria-label="Percurso até ao break-even: {{ rsm.recuperado|pct }} recuperado de {{ rsm.investimento|eur }}">
+      <path class="trilho" d="M40 220 A180 180 0 0 1 400 220"/>
+      <path class="feito" id="arco-feito" d="M40 220 A180 180 0 0 1 {{ sx }} {{ sy }}"/>
+      <line class="horizonte" x1="10" y1="220" x2="430" y2="220"/>
+      <circle class="marco" cx="40" cy="220" r="5"/>
+      <circle class="marco fim" cx="400" cy="220" r="5"/>
+      <g id="sol" transform="translate({{ sx }} {{ sy }})">
+        <circle class="halo" r="30"/>
+        <g class="raios">
+          {% for a in range(0, 360, 45) %}
+          <line x1="0" y1="-24" x2="0" y2="-30" transform="rotate({{ a }})"/>
+          {% endfor %}
+        </g>
+        <circle class="disco" r="17"/>
+      </g>
+      <text class="valor" x="220" y="166" text-anchor="middle">{{ rsm.total|eur0 }}</text>
+      <text class="valor-sub" x="220" y="196" text-anchor="middle">recuperados de {{ rsm.investimento|eur0 }}</text>
+      <text class="rot-forte" x="40" y="252" text-anchor="start">Instalação</text>
+      <text x="40" y="274" text-anchor="start">{{ rsm.inicio|mes }}</text>
+      <text class="rot-forte" x="400" y="252" text-anchor="end">{{ 'Pago' if rsm.previsao else 'Break-even' }}</text>
+      <text x="400" y="274" text-anchor="end">{{ rsm.previsao|mes if rsm.previsao and rsm.previsao != 'pago' else '—' }}</text>
+    </svg>
+  </div>
+</section>
+
+{% set fechados = res|rejectattr("em_curso")|list %}
+{% set venda_total = res|sum(attribute="venda_eur") %}
+<dl class="factos">
+  <div class="facto">
+    <dt>{{ icone("calendario") }} Média por mês</dt>
+    <dd>{{ rsm.media|eur }}</dd>
+    <small>em {{ rsm.meses }} {{ 'mês fechado' if rsm.meses == 1 else 'meses fechados' }}</small>
+  </div>
+  <div class="facto">
+    <dt>{{ icone("euro") }} Em {{ rsm.ultimo_mes|so_mes }}</dt>
+    <dd>{{ rsm.ultima_poupanca|eur }}</dd>
+    <small>o último mês fechado</small>
+  </div>
+  <div class="facto">
+    <dt>{{ icone("casa") }} Autossuficiência</dt>
+    <dd>{{ rsm.autossuficiencia|pct }}</dd>
+    <small>da casa a sol e bateria</small>
+  </div>
+  <div class="facto">
+    <dt>{{ icone("venda") }} Venda do excedente</dt>
+    <dd>{{ venda_total|eur }}</dd>
+    <small>no total, desde o início</small>
+  </div>
+</dl>
+
+<div class="duas-colunas">
+  {% set u = fechados[-1] if fechados else res[-1] %}
+  {% set tot = u.consumo_kwh or 1 %}
+  <section class="bloco" aria-labelledby="t-fluxo">
+    <div class="bloco-cabeca">
+      <h2 id="t-fluxo">De onde veio a energia em {{ u.mes|so_mes }}</h2>
+      <p>{{ u.consumo_kwh|kwh }} kWh consumidos em casa</p>
+    </div>
+    <div class="fluxo">
+      <div class="fluxo-barra" role="img" aria-label="Painéis {{ (u.direto_kwh / tot)|pct }}, bateria {{ (u.bateria_kwh / tot)|pct }}, rede {{ (u.rede_kwh / tot)|pct }}">
+        {% for cls, v in [("f-sol", u.direto_kwh), ("f-bat", u.bateria_kwh), ("f-rede", u.rede_kwh)] if v > 0 %}
+        <div class="{{ cls }}" style="flex: {{ v }}">{{ (v / tot)|pct if v / tot > 0.09 }}</div>
+        {% endfor %}
+      </div>
+      <div class="fluxo-legenda">
+        <div><span><i style="background: var(--sol)"></i>Painéis, em direto</span><b>{{ u.direto_kwh|kwh }} kWh</b></div>
+        <div><span><i style="background: var(--bateria)"></i>Bateria</span><b>{{ u.bateria_kwh|kwh }} kWh</b></div>
+        <div><span><i style="background: var(--rede)"></i>Rede</span><b>{{ u.rede_kwh|kwh }} kWh</b><small>{{ u.fatura_com|eur }} na fatura{{ ' (estimado)' if u.fatura_real is none }}</small></div>
+      </div>
+      {% if u.injetado_kwh %}
+      <p class="venda-linha">{{ icone("venda") }}
+        <span>Sobraram <b>{{ u.injetado_kwh|kwh }} kWh</b>, injetados na rede e vendidos por <b>{{ u.venda_eur|eur }}</b>.</span></p>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="bloco" aria-labelledby="t-poup">
+    <div class="bloco-cabeca">
+      <h2 id="t-poup">Poupança por mês</h2>
+      <p>O que deixaste de comprar, mais o que vendeste</p>
+    </div>
+    <div class="legenda">
+      <span><i style="background: var(--ganho)"></i>Energia que não compraste</span>
+      <span><i style="background: var(--sol)"></i>Venda do excedente</span>
+    </div>
+    <div class="grafico"><canvas id="g-poupanca" aria-label="Poupança por mês"></canvas></div>
+  </section>
+</div>
+
+<section class="bloco" aria-labelledby="t-meses">
+  <div class="bloco-cabeca">
+    <h2 id="t-meses">Mês a mês</h2>
+    <p>Faturas com <span class="estimado">≈</span> são estimadas pelo contrato, sem taxas nem contribuição audiovisual.</p>
+  </div>
+  <div class="tabela-wrap">
+    {% set maxp = (res|map(attribute="poupanca_eur")|max) or 1 %}
+    <table>
+      <thead><tr>
+        <th>Mês</th>
+        <th class="col-sec">Do sol</th>
+        <th class="col-sec">Da rede</th>
+        <th class="col-sec">Injetado</th>
+        <th>Fatura</th>
+        <th class="col-sec">Sem painéis</th>
+        <th>Poupança</th>
+      </tr></thead>
+      <tbody>
+      {% for r in res|reverse %}
+        <tr>
+          <td class="mes-nome">{{ r.mes|mes }}
+            <small>{% if r.em_curso %}em curso, {{ r.dias }} dias{% else %}{{ r.empresa_compra }}{% endif %}</small></td>
+          <td class="col-sec">{{ r.solar_kwh|kwh }} kWh</td>
+          <td class="col-sec">{{ r.rede_kwh|kwh }} kWh</td>
+          <td class="col-sec">{{ r.injetado_kwh|kwh }} kWh</td>
+          <td>{% if r.fatura_real is none %}<span class="estimado" title="Estimada">≈</span>{% endif %}{{ r.fatura_com|eur }}</td>
+          <td class="col-sec">{% if r.fatura_real is none %}<span class="estimado">≈</span>{% endif %}{{ r.fatura_sem|eur }}</td>
+          <td>
+            <div class="poupanca-cel">
+              <span class="barrinha" aria-hidden="true">
+                <span class="ev" style="width: {{ ([r.evitado_eur, 0]|max / maxp * 100)|round(1) }}%"></span>
+                <span class="vd" style="width: {{ (r.venda_eur / maxp * 100)|round(1) }}%"></span>
+              </span>
+              <b>{{ r.poupanca_eur|eur }}</b>
+            </div>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if rsm %}
+<script src="{{ url_for('static', filename='chart.umd.min.js') }}"></script>
+<script>
+(() => {
+  const dados = {{ res|tojson }};
+  const css = getComputedStyle(document.documentElement);
+  const cor = (v) => css.getPropertyValue(v).trim();
+  const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+  const eur = new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' });
+
+  // ---- o sol a subir até onde estás (uma vez, ao abrir) ----
+  const alvo = {{ [rsm.recuperado, 1]|min|tojson }};
+  const sol = document.getElementById('sol'), feito = document.getElementById('arco-feito');
+  const ponto = (q) => { const t = Math.PI * (1 - q); return [220 + 180 * Math.cos(t), 220 - 180 * Math.sin(t)]; };
+  const desenhar = (q) => {
+    const [x, y] = ponto(q);
+    sol.setAttribute('transform', `translate(${x.toFixed(2)} ${y.toFixed(2)})`);
+    feito.setAttribute('d', `M40 220 A180 180 0 0 1 ${x.toFixed(2)} ${y.toFixed(2)}`);
+  };
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const visivel = Math.max(alvo, 0.001), dur = 1400, t0 = performance.now();
+    const passo = (t) => {
+      const k = Math.min((t - t0) / dur, 1), e = 1 - Math.pow(1 - k, 3);
+      desenhar(visivel * e);
+      if (k < 1) requestAnimationFrame(passo);
+    };
+    desenhar(0);
+    requestAnimationFrame(passo);
+  }
+
+  // ---- gráfico de poupança ----
+  Chart.defaults.font.family = cor('--f-texto');
+  Chart.defaults.color = cor('--tinta-3');
+  new Chart(document.getElementById('g-poupanca'), {
+    type: 'bar',
+    data: {
+      labels: dados.map((d) => MESES[+d.mes.slice(5) - 1] + (d.em_curso ? '…' : '')),
+      datasets: [
+        { label: 'Energia que não compraste', data: dados.map((d) => d.evitado_eur), backgroundColor: cor('--ganho') },
+        { label: 'Venda do excedente', data: dados.map((d) => d.venda_eur), backgroundColor: cor('--sol'),
+          borderRadius: { topLeft: 6, topRight: 6 } },
+      ].map((s) => Object.assign({ maxBarThickness: 38, borderSkipped: false }, s)),
+    },
+    options: {
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: cor('--tinta'), titleColor: cor('--superficie'), bodyColor: cor('--superficie'),
+          padding: 10, cornerRadius: 8, boxPadding: 4,
+          callbacks: {
+            title: (it) => { const d = dados[it[0].dataIndex]; return MESES[+d.mes.slice(5) - 1] + ' ' + d.mes.slice(0, 4); },
+            label: (c) => ' ' + c.dataset.label + ': ' + eur.format(c.parsed.y),
+            footer: (it) => 'Total: ' + eur.format(dados[it[0].dataIndex].poupanca_eur),
+          },
+        },
+      },
+      scales: {
+        x: { stacked: true, grid: { display: false }, border: { display: false } },
+        y: { stacked: true, beginAtZero: true, border: { display: false }, grid: { color: cor('--linha') },
+             ticks: { maxTicksLimit: 5, callback: (v) => v + ' €' } },
+      },
+    },
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% from "icones.html" import icone %}
+{% block titulo %}Definições · Poupança solar{% endblock %}
+{% block conteudo %}
+<div class="pagina-cabeca"><div><h1>Definições</h1></div></div>
+
+<div class="duas-colunas">
+  <section class="bloco" aria-labelledby="t-sis">
+    <div class="bloco-cabeca"><h2 id="t-sis">Sistema</h2></div>
+    <form method="post" class="form">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <div class="grelha-campos">
+        <label class="campo"><span>Investimento total</span>
+          <span class="com-unidade"><input name="investimento_eur" inputmode="decimal" required value="{{ defs.investimento_eur|simples }}"><em>€</em></span>
+          <small>Se investires mais, soma aqui.</small></label>
+        <label class="campo"><span>Primeiro mês a funcionar</span>
+          <input type="month" name="primeiro_mes" required value="{{ defs.primeiro_mes }}"></label>
+      </div>
+      <h2 style="margin-top:.5rem">IVA da energia</h2>
+      <div class="grelha-campos">
+        <label class="campo"><span>Taxa reduzida</span>
+          <span class="com-unidade"><input name="iva_reduzido" inputmode="decimal" required value="{{ (defs.iva_reduzido|float * 100)|simples }}"><em>%</em></span></label>
+        <label class="campo"><span>Taxa normal</span>
+          <span class="com-unidade"><input name="iva_normal" inputmode="decimal" required value="{{ (defs.iva_normal|float * 100)|simples }}"><em>%</em></span></label>
+        <label class="campo"><span>kWh com taxa reduzida</span>
+          <span class="com-unidade"><input name="limite_iva_kwh_30dias" inputmode="decimal" required value="{{ defs.limite_iva_kwh_30dias|simples }}"><em>/30 dias</em></span></label>
+      </div>
+      <div><button class="botao sol">Guardar definições</button></div>
+    </form>
+  </section>
+
+  <section class="bloco" aria-labelledby="t-deye">
+    <div class="bloco-cabeca"><h2 id="t-deye">Ligação à Deye Cloud</h2>
+      {% if deye_ok %}<span class="etiqueta verde">Configurada</span>{% else %}<span class="etiqueta">Por configurar</span>{% endif %}</div>
+
+    {% if teste %}
+      {% if teste.ok %}
+      <div class="aviso ok" role="status">{{ icone("ok") }}<span>Ligação a funcionar.
+        {% if teste.dados %}Em {{ teste.mes|mes_longo }} a Deye regista {{ teste.dados.consumo_kwh|kwh }} kWh consumidos,
+        {{ teste.dados.rede_kwh|kwh }} kWh da rede e {{ teste.dados.injetado_kwh|kwh }} kWh injetados.
+        Confirma que batem com a app.{% else %}A Deye ainda não tem dados de {{ teste.mes|mes_longo }}.{% endif %}</span></div>
+      {% if teste.estacoes|length > 1 %}
+      <p class="nota-texto">A tua conta tem {{ teste.estacoes|length }} instalações; está a ser usada a <b>{{ teste.usada }}</b>.
+        Para escolher outra, define <code>DEYE_STATION_ID</code>:</p>
+      <ul class="lista">{% for e in teste.estacoes %}<li><div class="principal"><b>{{ e.nome }}</b><small>ID {{ e.id }}</small></div>
+        {% if e.id == teste.usada %}<span class="etiqueta verde">Em uso</span>{% endif %}</li>{% endfor %}</ul>
+      {% elif teste.estacoes %}
+      <p class="nota-texto">Instalação: <b>{{ teste.estacoes[0].nome }}</b> (ID {{ teste.estacoes[0].id }}).</p>
+      {% endif %}
+      {% else %}
+      <div class="aviso erro" role="status">{{ icone("alerta") }}<span>A ligação falhou: {{ teste.erro }}</span></div>
+      {% endif %}
+    {% endif %}
+
+    {% if deye_ok %}
+      {% if ultima %}
+      <ul class="lista">
+        <li><div class="principal"><b>Última atualização</b><small>{{ ultima.quando }} UTC — {{ ultima.mensagem }}</small></div>
+          <span class="etiqueta {{ 'verde' if ultima.ok }}">{{ 'Correu bem' if ultima.ok else 'Falhou' }}</span></li>
+      </ul>
+      {% endif %}
+      <p class="nota-texto">Todos os dias a app relê o mês atual e o anterior, porque a Deye pode acrescentar dados atrasados nos primeiros dias do mês. Um mês só conta para a média depois de terminar.</p>
+      <div class="acoes">
+        <form method="post" action="{{ url_for('testar_deye') }}">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <button class="botao leve">{{ icone("ok") }} Testar ligação</button>
+        </form>
+        <form method="post" action="{{ url_for('sincronizar') }}" data-sync
+              onsubmit="return confirm('Reler todos os meses desde {{ defs.primeiro_mes|mes }}? Os meses escritos à mão não mudam.')">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <input type="hidden" name="completo" value="1">
+          <button class="botao leve">{{ icone("atualizar") }} Reler todo o histórico</button>
+        </form>
+      </div>
+    {% else %}
+      <ol class="passos">
+        <li>Entra em <b>developer.deyecloud.com</b> com o mesmo email da app Deye Cloud e cria uma aplicação. Guarda o <b>App ID</b> e o <b>App Secret</b>.</li>
+        <li>Nas variáveis do servidor (na Vercel: Settings → Environment Variables) adiciona <code>DEYE_APP_ID</code>, <code>DEYE_APP_SECRET</code>, <code>DEYE_EMAIL</code> e <code>DEYE_PASSWORD</code>.</li>
+        <li>Volta a publicar (na Vercel: Redeploy) e carrega em <b>Testar ligação</b> aqui.</li>
+      </ol>
+      <p class="nota-texto">Até lá, podes escrever os meses à mão em <a href="{{ url_for('meses') }}">Energia</a>.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,64 @@
+{% from "icones.html" import icone, sol_logo %}
+<!doctype html>
+<html lang="pt-PT">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>{% block titulo %}Poupança solar{% endblock %}</title>
+  <meta name="theme-color" content="#eef3f8" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0c1524" media="(prefers-color-scheme: dark)">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='18' r='7' fill='%23f5a524'/><path d='M16 4.5v3.2M6.4 8.4l2.3 2.3M25.6 8.4l-2.3 2.3M2.5 18h3.2M26.3 18h3.2' stroke='%23f5a524' stroke-width='2.4' stroke-linecap='round'/></svg>">
+  <link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}?v=4">
+</head>
+<body>
+  {% set ep = request.endpoint %}
+  {% set paginas = [("painel", "Painel", "painel"), ("meses", "Energia", "energia"), ("contratos", "Contratos", "contrato"), ("faturas", "Faturas", "fatura"), ("definicoes", "Definições", "definicoes")] %}
+  <header class="topo">
+    <div class="topo-in">
+      <a class="marca" href="{{ url_for('painel') }}">{{ sol_logo() }} Poupança solar</a>
+      <nav class="nav" aria-label="Principal">
+        {% for e, nome, ic in paginas %}
+        <a href="{{ url_for(e) }}" {% if ep == e %}aria-current="page"{% endif %}>{{ icone(ic) }}{{ nome }}</a>
+        {% endfor %}
+        {% if com_senha %}
+        <form method="post" action="{{ url_for('logout') }}">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <button title="Sair">{{ icone("sair") }}<span class="sr">Sair</span></button>
+        </form>
+        {% endif %}
+      </nav>
+      {% if com_senha %}
+      <form method="post" action="{{ url_for('logout') }}" class="so-movel">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="link-perigo" title="Sair">{{ icone("sair") }}</button>
+      </form>
+      {% endif %}
+    </div>
+  </header>
+
+  <main class="pagina">
+    {% with msgs = get_flashed_messages(with_categories=true) %}
+      {% for cat, m in msgs %}
+      <div class="aviso {{ cat }}" role="status">{{ icone("ok" if cat == "ok" else "alerta") }}<span>{{ m }}</span></div>
+      {% endfor %}
+    {% endwith %}
+    {% block conteudo %}{% endblock %}
+  </main>
+
+  <nav class="nav-movel" aria-label="Principal">
+    {% for e, nome, ic in paginas %}
+    <a href="{{ url_for(e) }}" {% if ep == e %}aria-current="page"{% endif %}>{{ icone(ic) }}{{ nome }}</a>
+    {% endfor %}
+  </nav>
+
+  <script>
+    // mostra que está a trabalhar enquanto fala com a Deye
+    document.querySelectorAll('form[data-sync]').forEach((f) => f.addEventListener('submit', (ev) => {
+      if (ev.defaultPrevented) return; // cancelado na confirmação
+      const b = f.querySelector('button'); b.classList.add('a-rodar'); b.disabled = true;
+      b.lastChild.textContent = ' A falar com a Deye…';
+    }));
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% from "icones.html" import icone %}
+{% block titulo %}Faturas · Poupança solar{% endblock %}
+{% block conteudo %}
+<div class="pagina-cabeca">
+  <div>
+    <h1>Faturas</h1>
+    <p>Opcional. Com o total de uma fatura, o painel deixa de estimar esse mês e compara a fatura verdadeira com a que pagarias sem painéis.</p>
+  </div>
+</div>
+
+<div class="duas-colunas">
+  <section class="bloco" aria-labelledby="t-reg">
+    <div class="bloco-cabeca"><h2 id="t-reg">Registar fatura</h2></div>
+    <form method="post" class="form">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <div class="grelha-campos">
+        <label class="campo"><span>Mês do consumo</span><input type="month" name="mes" required value="{{ mes_passado }}"></label>
+        <label class="campo"><span>Total pago</span>
+          <span class="com-unidade"><input name="total_eur" inputmode="decimal" required placeholder="24,30"><em>€</em></span></label>
+      </div>
+      <label class="campo"><span>Notas</span><input name="notas" placeholder="Opcional"></label>
+      <div><button class="botao sol">{{ icone("fatura") }} Guardar fatura</button></div>
+      <p class="campo"><small>Se esse mês já tiver fatura, é substituída.</small></p>
+    </form>
+  </section>
+
+  <section class="bloco" aria-labelledby="t-lista">
+    <div class="bloco-cabeca"><h2 id="t-lista">Registadas</h2></div>
+    {% if faturas %}
+    <ul class="lista">
+      {% for f in faturas %}
+      <li>
+        <div class="principal"><b>{{ f.mes|mes_longo|capitalize }}</b>{% if f.notas %}<small>{{ f.notas }}</small>{% endif %}</div>
+        <span class="valor">{{ f.total_eur|eur }}</span>
+        <form method="post" action="{{ url_for('apagar_fatura', mes=f.mes) }}" onsubmit="return confirm('Apagar a fatura de {{ f.mes|mes }}?')">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <button class="link-perigo" title="Apagar fatura">{{ icone("lixo") }}</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <div class="vazio">{{ icone("fatura") }}<p>Quando chegar a próxima fatura, escreve aqui o total.</p></div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

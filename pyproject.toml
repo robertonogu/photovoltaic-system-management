@@ -1,0 +1,14 @@
+[project]
+name = "poupanca-solar"
+version = "1.1.0"
+description = "Acompanhar a poupança dos painéis solares e o break-even"
+requires-python = ">=3.10"
+dependencies = [
+    "flask==3.0.3",
+    "requests==2.32.3",
+    "gunicorn==22.0.0",
+    "psycopg[binary]==3.2.3",
+]
+
+[tool.vercel]
+entrypoint = "wsgi:app"

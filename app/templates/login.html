@@ -1,0 +1,23 @@
+{% from "icones.html" import sol_logo %}
+<!doctype html>
+<html lang="pt-PT">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Entrar · Poupança solar</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}?v=4">
+</head>
+<body class="login-pagina">
+  <form method="post" class="login-caixa">
+    {{ sol_logo() }}
+    <div>
+      <h1>Poupança solar</h1>
+      <p>Entra para ver quanto o sol já te poupou.</p>
+    </div>
+    <label class="campo"><span>Palavra-passe</span>
+      <input type="password" name="senha" autofocus required autocomplete="current-password"></label>
+    {% if erro %}<p class="erro-txt" role="alert">{{ erro }}</p>{% endif %}
+    <button class="botao sol">Entrar</button>
+  </form>
+</body>
+</html>

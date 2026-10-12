@@ -1,0 +1,52 @@
+{# Ícones em linha (traço), para não depender de bibliotecas externas #}
+{% macro icone(nome, classe="") -%}
+<svg class="icone {{ classe }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+{%- if nome == "painel" -%}
+  <path d="M3 13h8V3H3zM13 21h8V11h-8zM13 3v5h8V3zM3 21h8v-5H3z"/>
+{%- elif nome == "energia" -%}
+  <path d="M13 2 4 14h7l-1 8 9-12h-7z"/>
+{%- elif nome == "contrato" -%}
+  <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/>
+{%- elif nome == "fatura" -%}
+  <path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><path d="M9 7h6M9 11h6M9 15h3"/>
+{%- elif nome == "definicoes" -%}
+  <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>
+{%- elif nome == "sol" -%}
+  <circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>
+{%- elif nome == "bateria" -%}
+  <rect x="2" y="7" width="17" height="10" rx="2"/><path d="M22 11v2M6 10v4M10 10v4"/>
+{%- elif nome == "rede" -%}
+  <path d="M8 22 12 2l4 20M6 9h12M4.5 15h15M9.5 15 12 22l2.5-7"/>
+{%- elif nome == "atualizar" -%}
+  <path d="M21 12a9 9 0 0 1-15.5 6.3L3 16M3 12a9 9 0 0 1 15.5-6.3L21 8"/><path d="M21 3v5h-5M3 21v-5h5"/>
+{%- elif nome == "ok" -%}
+  <circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>
+{%- elif nome == "alerta" -%}
+  <circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 17h.01"/>
+{%- elif nome == "lixo" -%}
+  <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/>
+{%- elif nome == "mais" -%}
+  <path d="M12 5v14M5 12h14"/>
+{%- elif nome == "sair" -%}
+  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>
+{%- elif nome == "venda" -%}
+  <path d="M12 19V5M5 12l7-7 7 7"/>
+{%- elif nome == "calendario" -%}
+  <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
+{%- elif nome == "euro" -%}
+  <path d="M17 6.5A7 7 0 1 0 17 17.5M4 10h10M4 14h10"/>
+{%- elif nome == "casa" -%}
+  <path d="m3 11 9-8 9 8M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/>
+{%- endif -%}
+</svg>
+{%- endmacro %}
+
+{% macro sol_logo() -%}
+<svg viewBox="0 0 32 32" aria-hidden="true">
+  <circle cx="16" cy="18" r="7" fill="var(--sol)"/>
+  <g stroke="var(--sol)" stroke-width="2.4" stroke-linecap="round">
+    <path d="M16 4.5v3.2M6.4 8.4l2.3 2.3M25.6 8.4l-2.3 2.3M2.5 18h3.2M26.3 18h3.2"/>
+  </g>
+  <path d="M3 26h26" stroke="var(--tinta)" stroke-width="2.4" stroke-linecap="round"/>
+</svg>
+{%- endmacro %}
