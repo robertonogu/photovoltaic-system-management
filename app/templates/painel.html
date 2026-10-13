@@ -112,7 +112,7 @@
         {% endfor %}
       </div>
       <div class="fluxo-legenda">
-        <div><span><i style="background: var(--sol)"></i>Painéis, em direto</span><b>{{ u.direto_kwh|kwh }} kWh</b></div>
+        <div><span><i style="background: var(--sol)"></i>Painéis</span><b>{{ u.direto_kwh|kwh }} kWh</b></div>
         <div><span><i style="background: var(--bateria)"></i>Bateria</span><b>{{ u.bateria_kwh|kwh }} kWh</b></div>
         <div><span><i style="background: var(--rede)"></i>Rede</span><b>{{ u.rede_kwh|kwh }} kWh</b><small>{{ u.fatura_com|eur }} na fatura{{ ' (estimado)' if u.fatura_real is none }}</small></div>
       </div>
@@ -232,6 +232,7 @@
         legend: { display: false },
         tooltip: {
           backgroundColor: cor('--tinta'), titleColor: cor('--superficie'), bodyColor: cor('--superficie'),
+          footerColor: cor('--superficie'), footerFont: { weight: '700' }, footerMarginTop: 8,
           padding: 10, cornerRadius: 8, boxPadding: 4,
           callbacks: {
             title: (it) => { const d = dados[it[0].dataIndex]; return MESES[+d.mes.slice(5) - 1] + ' ' + d.mes.slice(0, 4); },
