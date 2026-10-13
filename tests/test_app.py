@@ -431,11 +431,15 @@ def test_ler_autofatura_meo():
     "Excedente energia produzida\n404,21\u00a0kWh €\u00a00,06 €\u00a024,25 0 %\n21/07/2026 30/09/2026",
     # o valor com o € depois
     "Excedente energia produzida 21/07/2026 30/09/2026 404,21 kWh 0,06 € 24,25 € 0 %",
+    # tudo por ordem, como aparece no PDF aberto
+    "Excedente energia produzida 21/07/2026 30/09/2026 404,21 kWh € 0,06 € 24,25 0 %",
 ])
 def test_ler_autofatura_com_colunas_baralhadas(linha):
     from app.faturas_meo import ler
-    original = "Excedente energia produzida 21/07/2026 30/09/2026 404,21 kWh € 0,06 € 24,25 0 %"
-    a = ler(texto("meo_autofatura_2026-09.txt").replace(original, linha))
+    real = "0 %Excedente energia produzida   € 0,06 € 24,25 404,21 kWh21/07/2026 30/09/2026"  # como o pypdf a tira
+    t = texto("meo_autofatura_2026-09.txt")
+    assert real in t
+    a = ler(t.replace(real, linha))
     assert (a["inicio"], a["fim"], a["kwh"], a["preco_kwh"], a["total_eur"]) == ("2026-07-21", "2026-09-30", 404.21, 0.06, 24.25)
 
 
