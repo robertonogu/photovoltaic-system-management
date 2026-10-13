@@ -136,37 +136,56 @@ def ler(texto: str) -> dict:
 
 
 # linha da autofatura: "Excedente energia produzida 21/07/2026 30/09/2026 404,21 kWh € 0,06 € 24,25 0 %"
-LINHA_VENDA = re.compile(
-    r"Excedente[^\n]*?(?P<ini>\d{2}/\d{2}/\d{4})\s+(?P<fim>\d{2}/\d{2}/\d{4})\s*(?P<kwh>" + NUM + r")\s*kWh"
-    r"\s*€\s*(?P<unit>" + NUM + r")\s*€\s*(?P<valor>" + NUM + r")")
+# O pypdf nem sempre tira as colunas da tabela pela ordem nem na mesma linha, por isso cada valor é
+# procurado à parte numa janela de texto depois de "Excedente", e não numa linha fixa.
+DATA = r"\d{2}/\d{2}/\d{4}"
+SOLTO = r"(?<![\d/.,])"  # o número não pode vir colado a outro (ex.: o ano de uma data, "2026 404,21")
+KWH = re.compile(SOLTO + r"(" + NUM + r")\s*kWh(?!\s*/)")  # "404,21 kWh", mas não "170,88 kWh/mês"
+EURO = re.compile(r"€\s*(" + NUM + r")|" + SOLTO + r"(" + NUM + r")\s*€")
 
 
 def ler_autofatura(texto: str) -> dict:
     """Autofatura de venda do excedente: a MEO compra-te a energia injetada na rede."""
+    t = re.sub(r"[ \t\u00a0\u202f]+", " ", texto)
     f: dict = {"comercializador": "MEO Energia", "tipo": "venda"}
-    m = re.search(r"Autofatura:\s*(.+?)\s+de\s+(\d{2}/\d{2}/\d{4})", texto)
+    m = re.search(r"Autofatura:\s*(.+?)\s+de\s+(" + DATA + r")", t)
     if not m:
         raise FaturaIlegivel("Não encontrei o número da autofatura.")
     f["numero"] = re.sub(r"\s+", " ", m.group(1)).strip()
     f["emitida"] = _d(m.group(2))
 
-    linhas = list(LINHA_VENDA.finditer(texto))
-    if not linhas:
-        raise FaturaIlegivel("Não encontrei a linha do excedente (kWh e preço) na autofatura.")
-    m = re.search(r"Período de autofaturação:\s*(\d{2}/\d{2}/\d{4})\s*a\s*(\d{2}/\d{2}/\d{4})", texto)
+    pos = t.find("Excedente")
+    janela = t[pos:pos + 400] if pos >= 0 else ""
+    m = re.search(r"autofatura[çc][ãa]o:\s*(" + DATA + r")\s*a\s*(" + DATA + r")", t)
+    datas = re.findall(DATA, janela)
     if m:
         f["inicio"], f["fim"] = _d(m.group(1)), _d(m.group(2))
+    elif len(datas) >= 2:
+        f["inicio"], f["fim"] = _d(datas[0]), _d(datas[1])
     else:
-        f["inicio"], f["fim"] = min(_d(x["ini"]) for x in linhas), max(_d(x["fim"]) for x in linhas)
+        raise FaturaIlegivel("Não encontrei o período da autofatura.")
     f["dias"] = (date.fromisoformat(f["fim"]) - date.fromisoformat(f["inicio"])).days + 1
 
-    f["kwh"] = round(sum(_n(x["kwh"]) for x in linhas), 2)
-    valor = round(sum(_n(x["valor"]) for x in linhas), 2)
-    # com várias linhas (o preço mudou a meio), o preço é a média ponderada
-    f["preco_kwh"] = _n(linhas[0]["unit"]) if len(linhas) == 1 or not f["kwh"] else round(valor / f["kwh"], 4)
-    m = re.search(r"Total a receber:\s*€\s*(" + NUM + r")", texto) or re.search(r"TOTAL\s*€\s*(" + NUM + r")", texto)
-    f["total_eur"] = _n(m.group(1)) if m else valor
-    f["confere"] = abs(f["total_eur"] - valor) <= 0.02
+    kwhs = [_n(x) for x in KWH.findall(janela)] or [_n(x) for x in KWH.findall(t)]
+    if not kwhs:
+        excerto = re.sub(r"\s+", " ", janela or t[:300])[:250]
+        raise FaturaIlegivel(f"Não encontrei os kWh do excedente na autofatura. Texto lido: «{excerto}»")
+    f["kwh"] = kwhs[0]
+
+    m = re.search(r"Total a receber:\s*€?\s*(" + NUM + r")", t) or re.search(r"TOTAL\s*€\s*(" + NUM + r")", t)
+    euros = [_n(a or b) for a, b in EURO.findall(janela)]
+    if m:
+        f["total_eur"] = _n(m.group(1))
+    elif euros:
+        f["total_eur"] = max(euros)
+    else:
+        excerto = re.sub(r"\s+", " ", janela or t[:300])[:250]
+        raise FaturaIlegivel(f"Não encontrei o total da autofatura. Texto lido: «{excerto}»")
+    # preço: o da tabela, se estiver lá e bater com o total; senão, total ÷ kWh
+    derivado = round(f["total_eur"] / f["kwh"], 4) if f["kwh"] else 0.0
+    unit = next((e for e in euros if 0 < e < 1), None)
+    f["preco_kwh"] = unit if unit is not None and abs(unit * f["kwh"] - f["total_eur"]) <= 0.05 else derivado
+    f["confere"] = abs(f["preco_kwh"] * f["kwh"] - f["total_eur"]) <= 0.05
     return f
 
 

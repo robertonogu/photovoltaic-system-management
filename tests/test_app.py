@@ -424,6 +424,28 @@ def test_ler_autofatura_meo():
     assert ler(texto("meo_2026-09.txt"))["tipo"] == "compra"
 
 
+@pytest.mark.parametrize("linha", [
+    # cada coluna da tabela numa linha
+    "Excedente energia produzida\n21/07/2026\n30/09/2026\n404,21 kWh\n€ 0,06\n€ 24,25\n0 %",
+    # números antes das datas, com espaços que não quebram
+    "Excedente energia produzida\n404,21\u00a0kWh €\u00a00,06 €\u00a024,25 0 %\n21/07/2026 30/09/2026",
+    # o valor com o € depois
+    "Excedente energia produzida 21/07/2026 30/09/2026 404,21 kWh 0,06 € 24,25 € 0 %",
+])
+def test_ler_autofatura_com_colunas_baralhadas(linha):
+    from app.faturas_meo import ler
+    original = "Excedente energia produzida 21/07/2026 30/09/2026 404,21 kWh € 0,06 € 24,25 0 %"
+    a = ler(texto("meo_autofatura_2026-09.txt").replace(original, linha))
+    assert (a["inicio"], a["fim"], a["kwh"], a["preco_kwh"], a["total_eur"]) == ("2026-07-21", "2026-09-30", 404.21, 0.06, 24.25)
+
+
+def test_autofatura_ilegivel_mostra_o_texto():
+    from app.faturas_meo import FaturaIlegivel, ler
+    t = re.sub(r"\d+,\d+ kWh", "", texto("meo_autofatura_2026-09.txt"))
+    with pytest.raises(FaturaIlegivel, match="Texto lido: «Excedente energia produzida"):
+        ler(t)
+
+
 def test_vendas_por_mes():
     from app.calc import vendas_por_mes
     af = [{"inicio": "2026-07-21", "fim": "2026-09-30", "total_eur": 24.25}]
