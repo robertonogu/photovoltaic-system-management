@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hmac
+from urllib.parse import urlparse
 import logging
 import os
 import re
@@ -280,7 +281,11 @@ def _criar_app() -> Flask:
     def sincronizar():
         ok, msg = sync.sincronizar(completo=request.form.get("completo") == "1")
         flash(msg, "ok" if ok else "erro")
-        return redirect(request.referrer or url_for("painel"))
+        # volta à página de onde veio (só páginas que se podem abrir; nunca o endereço de um formulário)
+        de_onde = urlparse(request.referrer or "").path
+        destino = next((url_for(e) for e, p in (("definicoes", "/definicoes"), ("meses", "/meses"), ("faturas", "/faturas"))
+                        if de_onde.startswith(p)), url_for("painel"))
+        return redirect(destino)
 
     # ---------- contratos ----------
     @app.route("/contratos", methods=["GET", "POST"])
@@ -534,6 +539,14 @@ def _criar_app() -> Flask:
     def emails_recentes():
         with db.ligar() as con:
             return con.execute("SELECT * FROM emails_recebidos ORDER BY id DESC LIMIT 5")
+
+    @app.get("/definicoes/testar-deye")
+    @app.get("/definicoes/deye")
+    @app.get("/definicoes/senha")
+    @app.get("/definicoes/email")
+    @app.get("/sincronizar")
+    def voltar_definicoes():
+        return redirect(url_for("definicoes"))
 
     @app.post("/definicoes/testar-deye")
     def testar_deye():

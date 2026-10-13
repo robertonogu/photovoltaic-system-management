@@ -397,3 +397,16 @@ def test_carregar_pdf_e_email(cliente, monkeypatch):
     assert "FA ME26/2 131 663" in html and "bi-horária" in html  # 40 de 54 kWh em vazio
     # com dados diários: 31 dias × 10 kWh em casa
     assert "310 kWh consumidos em casa" in html
+
+
+
+def test_reler_historico_depois_de_testar_ligacao(cliente):
+    c = cliente
+    entrar(c)
+    t = csrf(c)
+    c.post("/definicoes/testar-deye", data={"csrf": t})
+    r = c.post("/sincronizar", data={"csrf": t, "completo": "1"},
+               headers={"Referer": "https://x.vercel.app/definicoes/testar-deye"})
+    assert r.status_code == 302 and r.headers["Location"].endswith("/definicoes")
+    assert c.get("/definicoes/testar-deye").status_code == 302  # abrir o endereço diretamente já não dá 405
+    assert c.get("/sincronizar").status_code == 302
