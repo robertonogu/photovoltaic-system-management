@@ -43,6 +43,14 @@
       <small>{{ f.evitado_eur|eur }} na fatura + {{ f.venda_eur|eur }} de venda</small>
     </div>
   </div>
+  {% if f.variacao_rede is not none %}
+  {% set dif = f.diferenca_rede %}
+  <p class="conferir">{{ icone("rede") }}
+    <span>Rede: fatura <b>{{ f.kwh|kwh }} kWh</b> · Deye <b>{{ f.deye_rede_kwh|kwh }} kWh</b>{% if f.fonte != 'diária' %} (pelos totais mensais){% endif %}</span>
+    <span class="etiqueta {{ 'verde' if dif < 0.05 else ('sol' if dif <= 0.15 else 'perigo') }}"
+          title="{{ 'Batem certo' if dif < 0.05 else ('Diferença pequena' if dif <= 0.15 else 'Diferença grande') }}">
+      {{ '+' if f.variacao_rede > 0 }}{{ f.variacao_rede|pct }}</span></p>
+  {% endif %}
   {% else %}
   <p class="nota-texto">Ainda não há dados da Deye para este período, por isso não dá para calcular a poupança.</p>
   {% endif %}

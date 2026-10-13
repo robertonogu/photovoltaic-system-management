@@ -396,6 +396,9 @@ def test_carregar_pdf_e_email(cliente, monkeypatch):
     assert "FA ME26/2 131 663" in html and "bi-horária" in html  # 40 de 54 kWh em vazio
     # com dados diários: 31 dias × 10 kWh em casa
     assert "310 kWh consumidos em casa" in html
+    # comparação da rede sempre visível: 54 kWh na fatura, 31 dias × 2 kWh = 62 kWh na Deye (+15 %, amarelo)
+    assert "fatura <b>54 kWh</b> · Deye <b>62 kWh</b>" in html
+    assert re.search(r'etiqueta sol"[^>]*>\s*\+15 %', html)
 
 
 

@@ -198,4 +198,5 @@ def calcular_periodo(f: dict, energia: dict, venda: Contrato | None, imp: Impost
         "poupanca_eur": round(sem - f["total_eur"] + venda_eur, 2),
         # a fatura e a Deye medem a rede em sítios diferentes; mais de 15% de diferença merece atenção
         "diferenca_rede": (abs(energia["rede_kwh"] - f["kwh"]) / f["kwh"]) if f["kwh"] else None,
+        "variacao_rede": ((energia["rede_kwh"] - f["kwh"]) / f["kwh"]) if f["kwh"] else None,  # com sinal: Deye vs fatura
     }
