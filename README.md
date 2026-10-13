@@ -111,7 +111,7 @@ Para as receber **por email**: em Definições → Faturas por email, liga a rec
 - **Mudaste de empresa ou de preço?** Em **Contratos**, adiciona um contrato novo com a data de início. Não apagues o antigo: os meses passados continuam com o preço que tinham.
 - **Chegou a fatura?** Se o reencaminhamento do email estiver ligado, aparece sozinha em **Faturas**.
 - **Investiste mais** (ex.: outra bateria)? Em **Definições**, atualiza o investimento total.
-- **Um mês está errado?** Em **Energia**, apaga-o e carrega em **Atualizar da Deye**. Os meses marcados «À mão» (os iniciais) só passam a vir da Deye depois de apagados.
+- **Um mês está errado?** Em Definições, carrega em **Reler todo o histórico**: os valores da Deye substituem os que lá estão.
 
 ## Como se calcula
 

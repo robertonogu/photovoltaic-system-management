@@ -5,7 +5,7 @@
 <div class="pagina-cabeca">
   <div>
   <h1>Energia por mês</h1>
-  <p>Os meses chegam sozinhos da Deye Cloud todos os dias. Os meses marcados «À mão» são de antes da ligação à Deye: apaga-os para passarem a vir da Deye.</p>
+  <p>Os meses chegam sozinhos da Deye Cloud todos os dias.</p>
   </div>
   <form method="post" action="{{ url_for('sincronizar') }}" data-sync>
   <input type="hidden" name="csrf" value="{{ csrf }}">
@@ -22,14 +22,13 @@
   {% if meses %}
   <div class="tabela-wrap">
     <table>
-      <thead><tr><th>Mês</th><th>Rede</th><th>Painéis</th><th>Bateria</th><th class="col-sec">Injetado</th><th></th><th></th></tr></thead>
+      <thead><tr><th>Mês</th><th>Rede</th><th>Painéis</th><th>Bateria</th><th class="col-sec">Injetado</th><th></th></tr></thead>
       <tbody>
       {% for m in meses %}
         <tr>
           <td class="mes-nome">{{ m.mes|mes }}</td>
           <td>{{ m.rede_kwh|kwh }}</td><td>{{ m.direto_kwh|kwh }}</td><td>{{ m.bateria_kwh|kwh }}</td>
           <td class="col-sec">{{ m.injetado_kwh|kwh }}</td>
-          <td><span class="etiqueta {{ 'verde' if m.origem == 'deye' }}">{{ 'Deye' if m.origem == 'deye' else 'À mão' }}</span></td>
           <td>
             <form method="post" action="{{ url_for('apagar_mes', mes=m.mes) }}" onsubmit="return confirm('Apagar {{ m.mes|mes }}?')">
               <input type="hidden" name="csrf" value="{{ csrf }}">

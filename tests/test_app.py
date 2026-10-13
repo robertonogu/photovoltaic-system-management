@@ -189,28 +189,24 @@ def test_paginas_e_formularios(cliente):
     assert d["data_investimento"] == "2026-06-15" and d["primeiro_mes"] == "2026-06"
 
 
-def test_sincronizacao_deye_mantem_meses_a_mao(cliente):
+def test_sincronizacao_deye_substitui_meses_iniciais(cliente):
     c = cliente
     entrar(c)
     t = csrf(c)
     FalsaDeye.pedidos.clear()
     r = c.post("/sincronizar", data={"csrf": t}, follow_redirects=True)
     html = r.get_data(as_text=True)
-    assert "Atualizado da Deye: out 2026." in html and "Mantidos os teus valores à mão de set 2026" in html
+    assert "Atualizado da Deye: set 2026, out 2026." in html and "à mão" not in html
     caminho, corpo, auth = FalsaDeye.pedidos[0]
     assert caminho == "/v1.0/account/token?appId=id" and corpo["appSecret"] == "s"
     assert "password" in corpo and corpo["password"] != "pw"
     assert FalsaDeye.pedidos[-1][2] == "Bearer abc"
 
     meses = {m["mes"]: m for m in c.get("/api/dados").get_json()["meses"]}
-    assert meses["2026-09"]["rede_kwh"] == 43.8  # setembro estava à mão: mantém-se
+    assert meses["2026-09"]["rede_kwh"] == 40  # setembro vinha dos dados iniciais: passa a vir da Deye
+    assert meses["2026-07"]["rede_kwh"] == 15.79  # a Deye não devolveu julho: fica como estava
     assert meses["2026-10"]["rede_kwh"] == 15 and meses["2026-10"]["injetado_kwh"] == 60
     assert meses["2026-10"]["direto_kwh"] == 110 - 15 - 40
-
-    c.post("/meses/2026-09/apagar", data={"csrf": t})
-    c.post("/sincronizar", data={"csrf": t})
-    meses = {m["mes"]: m for m in c.get("/api/dados").get_json()["meses"]}
-    assert meses["2026-09"]["rede_kwh"] == 40  # depois de apagado, vem da Deye
 
 
 def test_login_errado_na_deye(cliente, monkeypatch):

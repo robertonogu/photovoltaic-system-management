@@ -52,11 +52,11 @@ def _mes_atual() -> str:
 
 
 def sincronizar(completo: bool = False) -> tuple[bool, str]:
-    """Vai buscar os totais mensais à Deye e grava-os. Meses escritos à mão não são alterados.
+    """Vai buscar os totais mensais à Deye e grava-os por cima do que lá estiver.
 
     Por defeito (todos os dias) só lê o mês atual e o anterior: o anterior pode ainda receber
     dados atrasados do logger nos primeiros dias do mês. Com completo=True relê o histórico todo
-    (também acontece sozinho na primeira vez).
+    (também acontece sozinho na primeira vez e depois de mudar a data do investimento).
     """
     if not configurado():
         return False, "A ligação à Deye não está configurada: faltam as variáveis DEYE_* no servidor."
@@ -64,20 +64,15 @@ def sincronizar(completo: bool = False) -> tuple[bool, str]:
         return False, "Já está a decorrer uma atualização."
     try:
         primeiro = db.primeiro_mes()
-        with db.ligar() as con:
-            ja_tem_deye = con.um("SELECT COUNT(*) AS n FROM meses WHERE origem = 'deye'")["n"] > 0
-        inicio = primeiro if (completo or not ja_tem_deye) else max(primeiro, somar_meses(_mes_atual(), -1))
+        tudo = completo or db.segredo("historico_lido") != primeiro
+        inicio = primeiro if tudo else max(primeiro, somar_meses(_mes_atual(), -1))
         c = cliente()
         meses = c.historico_mensal(inicio)
         _guardar_dias(c, inicio)
-        atualizados, mantidos = [], []
+        atualizados = []
         with db.ligar() as con:
-            manuais = {r["mes"] for r in con.execute("SELECT mes FROM meses WHERE origem = 'manual'")}
             for m in meses:
                 if m["mes"] < primeiro:
-                    continue
-                if m["mes"] in manuais:
-                    mantidos.append(m["mes"])
                     continue
                 con.execute(
                     """INSERT INTO meses (mes, consumo_kwh, rede_kwh, injetado_kwh, producao_kwh, bateria_kwh,
@@ -86,16 +81,17 @@ def sincronizar(completo: bool = False) -> tuple[bool, str]:
                        ON CONFLICT (mes) DO UPDATE SET consumo_kwh = excluded.consumo_kwh,
                          rede_kwh = excluded.rede_kwh, injetado_kwh = excluded.injetado_kwh,
                          producao_kwh = excluded.producao_kwh, bateria_kwh = excluded.bateria_kwh,
-                         carga_bateria_kwh = excluded.carga_bateria_kwh, atualizado = excluded.atualizado""",
+                         carga_bateria_kwh = excluded.carga_bateria_kwh, origem = 'deye',
+                         atualizado = excluded.atualizado""",
                     (m["mes"], m["consumo_kwh"], m["rede_kwh"], m["injetado_kwh"], m["producao_kwh"],
                      m["bateria_kwh"], m["carga_bateria_kwh"], db.agora()))
                 atualizados.append(m["mes"])
+        if tudo:
+            db.guardar_segredo("historico_lido", primeiro)
         if atualizados:
             msg = "Atualizado da Deye: " + ", ".join(_rotulo(x) for x in atualizados) + "."
         else:
             msg = "A Deye não devolveu meses novos."
-        if mantidos:
-            msg += " Mantidos os teus valores à mão de " + ", ".join(_rotulo(x) for x in mantidos) + "."
         _registar(True, msg)
         return True, msg
     except (DeyeErro, KeyError, ValueError) as e:
