@@ -4,12 +4,12 @@
 {% block conteudo %}
 <div class="pagina-cabeca">
   <div>
-    <h1>Energia por mês</h1>
-    <p>Os meses chegam sozinhos da Deye Cloud todos os dias. Um mês escrito à mão fica com os teus valores; apaga-o para voltar a usar os da Deye.</p>
+  <h1>Energia por mês</h1>
+  <p>Os meses chegam sozinhos da Deye Cloud todos os dias. Os meses marcados «À mão» são de antes da ligação à Deye: apaga-os para passarem a vir da Deye.</p>
   </div>
   <form method="post" action="{{ url_for('sincronizar') }}" data-sync>
-    <input type="hidden" name="csrf" value="{{ csrf }}">
-    <button class="botao leve" {{ 'disabled' if not deye_ok }}>{{ icone("atualizar") }} Atualizar da Deye</button>
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <button class="botao leve" {{ 'disabled' if not deye_ok }}>{{ icone("atualizar") }} Atualizar da Deye</button>
   </form>
 </div>
 
@@ -17,53 +17,32 @@
 <div class="aviso erro" role="status">{{ icone("alerta") }}<span>A última sincronização falhou: {{ ultima.mensagem }}</span></div>
 {% endif %}
 
-<div class="duas-colunas">
-  <section class="bloco" aria-labelledby="t-mao">
-    <div class="bloco-cabeca"><h2 id="t-mao">Escrever um mês à mão</h2><p>Os quatro valores da app Deye Cloud</p></div>
-    <form method="post" class="form">
-      <input type="hidden" name="csrf" value="{{ csrf }}">
-      <label class="campo"><span>Mês</span><input type="month" name="mes" required value="{{ mes_passado }}"></label>
-      <div class="grelha-campos">
-        <label class="campo"><span>{{ icone("rede") }} Comprado à rede</span>
-          <span class="com-unidade"><input name="rede_kwh" inputmode="decimal" required><em>kWh</em></span></label>
-        <label class="campo"><span>{{ icone("sol") }} Painéis, em direto</span>
-          <span class="com-unidade"><input name="direto_kwh" inputmode="decimal" required><em>kWh</em></span></label>
-        <label class="campo"><span>{{ icone("bateria") }} Bateria</span>
-          <span class="com-unidade"><input name="bateria_kwh" inputmode="decimal" required><em>kWh</em></span></label>
-        <label class="campo"><span>{{ icone("venda") }} Injetado na rede</span>
-          <span class="com-unidade"><input name="injetado_kwh" inputmode="decimal" required><em>kWh</em></span></label>
-      </div>
-      <div><button class="botao sol">{{ icone("mais") }} Guardar mês</button></div>
-    </form>
-  </section>
-
-  <section class="bloco" aria-labelledby="t-reg">
-    <div class="bloco-cabeca"><h2 id="t-reg">Meses registados</h2></div>
-    {% if meses %}
-    <div class="tabela-wrap">
-      <table>
-        <thead><tr><th>Mês</th><th>Rede</th><th>Painéis</th><th>Bateria</th><th class="col-sec">Injetado</th><th></th><th></th></tr></thead>
-        <tbody>
-        {% for m in meses %}
-          <tr>
-            <td class="mes-nome">{{ m.mes|mes }}</td>
-            <td>{{ m.rede_kwh|kwh }}</td><td>{{ m.direto_kwh|kwh }}</td><td>{{ m.bateria_kwh|kwh }}</td>
-            <td class="col-sec">{{ m.injetado_kwh|kwh }}</td>
-            <td><span class="etiqueta {{ 'verde' if m.origem == 'deye' }}">{{ 'Deye' if m.origem == 'deye' else 'À mão' }}</span></td>
-            <td>
-              <form method="post" action="{{ url_for('apagar_mes', mes=m.mes) }}" onsubmit="return confirm('Apagar {{ m.mes|mes }}?')">
-                <input type="hidden" name="csrf" value="{{ csrf }}">
-                <button class="link-perigo" title="Apagar mês">{{ icone("lixo") }}</button>
-              </form>
-            </td>
-          </tr>
-        {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% else %}
-    <div class="vazio">{{ icone("energia") }}<p>Sem meses ainda. Atualiza da Deye ou escreve o primeiro à mão.</p></div>
-    {% endif %}
-  </section>
-</div>
+<section class="bloco" aria-labelledby="t-reg">
+  <div class="bloco-cabeca"><h2 id="t-reg">Meses registados</h2></div>
+  {% if meses %}
+  <div class="tabela-wrap">
+    <table>
+      <thead><tr><th>Mês</th><th>Rede</th><th>Painéis</th><th>Bateria</th><th class="col-sec">Injetado</th><th></th><th></th></tr></thead>
+      <tbody>
+      {% for m in meses %}
+        <tr>
+          <td class="mes-nome">{{ m.mes|mes }}</td>
+          <td>{{ m.rede_kwh|kwh }}</td><td>{{ m.direto_kwh|kwh }}</td><td>{{ m.bateria_kwh|kwh }}</td>
+          <td class="col-sec">{{ m.injetado_kwh|kwh }}</td>
+          <td><span class="etiqueta {{ 'verde' if m.origem == 'deye' }}">{{ 'Deye' if m.origem == 'deye' else 'À mão' }}</span></td>
+          <td>
+            <form method="post" action="{{ url_for('apagar_mes', mes=m.mes) }}" onsubmit="return confirm('Apagar {{ m.mes|mes }}?')">
+              <input type="hidden" name="csrf" value="{{ csrf }}">
+              <button class="link-perigo" title="Apagar mês">{{ icone("lixo") }}</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="vazio">{{ icone("energia") }}<p>Sem meses ainda. Atualiza da Deye.</p></div>
+  {% endif %}
+</section>
 {% endblock %}

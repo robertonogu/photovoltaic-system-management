@@ -365,43 +365,12 @@ def _criar_app() -> Flask:
         return True, (f"Fatura {f['numero']} ({f['inicio'][8:]}/{f['inicio'][5:7]} a {f['fim'][8:]}/{f['fim'][5:7]}) "
                       + ("lida" if nova else "atualizada") + f": {f['kwh']:.0f} kWh, total {f['total_eur']:.2f} €.".replace(".", ",", 1) + aviso)
 
-    @app.route("/faturas", methods=["GET", "POST"])
+    @app.get("/faturas")
     def faturas():
-        if request.method == "POST":
-            ficheiros = [x for x in request.files.getlist("pdf") if x and x.filename]
-            if ficheiros:
-                for x in ficheiros:
-                    ok, msg = guardar_fatura_pdf(x.read(), "pdf")
-                    flash(msg if ok else f"{x.filename}: {msg}", "ok" if ok else "erro")
-                return redirect(url_for("faturas"))
-            # fatura escrita à mão: só período, kWh e total; o resto vem do contrato
-            fm = request.form
-            inicio, fim = fm.get("inicio", ""), fm.get("fim", "")
-            total, kwh = _num(fm.get("total_eur")), _num(fm.get("kwh"))
-            if not (RE_DATA.match(inicio) and RE_DATA.match(fim)) or fim < inicio or total is None or kwh is None:
-                flash("Indica o início, o fim, os kWh e o total da fatura.", "erro")
-                return redirect(url_for("faturas"))
-            _, _, contratos, _, _, _ = carregar()
-            objs = [Contrato(c["tipo"], c["empresa"], c["desde"], c["preco_kwh"], c["potencia_eur_dia"] or 0,
-                             c["iva_potencia"]) for c in contratos]
-            compra = em_vigor(objs, "compra", inicio[:7])
-            n = (date.fromisoformat(fim) - date.fromisoformat(inicio)).days + 1
-            pot = compra.potencia_eur_dia if compra else 0
-            preco = compra.preco_kwh if compra else 0
-            db.guardar_fatura({
-                "numero": f"manual-{inicio}", "comercializador": compra.empresa if compra else None, "emitida": None,
-                "inicio": inicio, "fim": fim, "dias": n, "kwh": kwh, "preco_kwh": preco, "potencia_eur_dia": pot,
-                "energia_eur": round(kwh * preco, 2), "potencia_eur": round(pot * n, 2),
-                "cav_eur": round(2.85 * 12 / 365.25 * n, 2), "iec_eur": round(0.001 * kwh, 2), "iec_kwh": 0.001,
-                "dgeg_eur": 0.07, "outros_eur": 0, "iva_eur": None, "total_eur": total, "origem": "manual",
-            })
-            flash("Fatura guardada.", "ok")
-            return redirect(url_for("faturas"))
         token = db.segredo("email_token")
         with db.ligar() as con:
             antigas = con.execute("SELECT * FROM faturas ORDER BY mes DESC")
-        return render_template("faturas.html", faturas=faturas_calculadas(), antigas=antigas,
-                               hoje=date.today().isoformat(), email_ativo=bool(token))
+        return render_template("faturas.html", faturas=faturas_calculadas(), antigas=antigas, email_ativo=bool(token))
 
     @app.post("/faturas/<path:numero>/apagar")
     def apagar_fatura(numero):
@@ -470,29 +439,13 @@ def _criar_app() -> Flask:
         return redirect(url_for("definicoes") + "#email")
 
     # ---------- meses (dados de energia) ----------
-    @app.route("/meses", methods=["GET", "POST"])
+    @app.get("/meses")
     def meses():
-        if request.method == "POST":
-            f = request.form
-            mes = f.get("mes", "")
-            rede, direto, bat, inj = (_num(f.get(k)) for k in ("rede_kwh", "direto_kwh", "bateria_kwh", "injetado_kwh"))
-            if not RE_MES.match(mes) or None in (rede, direto, bat, inj):
-                flash("Preenche o mês e os quatro valores em kWh.", "erro")
-            else:
-                with db.ligar() as con:
-                    con.execute("""INSERT INTO meses (mes, consumo_kwh, rede_kwh, injetado_kwh, bateria_kwh, origem, atualizado)
-                                   VALUES (?,?,?,?,?,'manual',?)
-                                   ON CONFLICT (mes) DO UPDATE SET consumo_kwh=excluded.consumo_kwh, rede_kwh=excluded.rede_kwh,
-                                     injetado_kwh=excluded.injetado_kwh, bateria_kwh=excluded.bateria_kwh,
-                                     producao_kwh=NULL, carga_bateria_kwh=NULL, origem='manual', atualizado=excluded.atualizado""",
-                                (mes, round(rede + direto + bat, 2), rede, inj, bat, db.agora()))
-                flash("Mês guardado. Fica com os teus valores; a Deye não o altera.", "ok")
-            return redirect(url_for("meses"))
         with db.ligar() as con:
             lista = con.execute("SELECT * FROM meses ORDER BY mes DESC")
         for m in lista:
             m["direto_kwh"] = max((m["consumo_kwh"] or 0) - (m["rede_kwh"] or 0) - (m["bateria_kwh"] or 0), 0)
-        return render_template("meses.html", meses=lista, mes_passado=_mes_passado(), ultima=sync.ultima())
+        return render_template("meses.html", meses=lista, ultima=sync.ultima())
 
     @app.post("/meses/<mes>/apagar")
     def apagar_mes(mes):
@@ -515,20 +468,19 @@ def _criar_app() -> Flask:
                     erros.append(chave)
                 else:
                     db.guardar_definicao(chave, str(v))
-            if RE_MES.match(f.get("primeiro_mes", "")):
-                db.guardar_definicao("primeiro_mes", f["primeiro_mes"])
+            if RE_DATA.match(f.get("data_investimento", "")):
+                db.guardar_definicao("data_investimento", f["data_investimento"])
+                db.guardar_definicao("primeiro_mes", f["data_investimento"][:7])
             else:
-                erros.append("primeiro_mes")
+                erros.append("data_investimento")
             flash("Definições guardadas." if not erros else "Alguns valores não eram válidos e não foram guardados.",
                   "ok" if not erros else "erro")
             return redirect(url_for("definicoes"))
         return pagina_definicoes(None)
 
     def pagina_definicoes(teste):
-        cred = sync.credenciais()
         return render_template("definicoes.html", defs=db.definicoes(), ultima=sync.ultima(), teste=teste,
-                               deye_origem=cred["origem"] if cred else None,
-                               deye_app_id=db.segredo("deye_app_id") or "", deye_email=db.segredo("deye_email") or "",
+                               deye_em_falta=sync.variaveis_em_falta(), primeiro_mes=db.primeiro_mes(),
                                senha_por_variavel=bool(senha_env()),
                                email_url=((request.url_root.rstrip("/").replace("http://", "https://", 1)
                                            if os.environ.get("VERCEL") else request.url_root.rstrip("/"))
@@ -541,7 +493,6 @@ def _criar_app() -> Flask:
             return con.execute("SELECT * FROM emails_recebidos ORDER BY id DESC LIMIT 5")
 
     @app.get("/definicoes/testar-deye")
-    @app.get("/definicoes/deye")
     @app.get("/definicoes/senha")
     @app.get("/definicoes/email")
     @app.get("/sincronizar")
@@ -550,34 +501,6 @@ def _criar_app() -> Flask:
 
     @app.post("/definicoes/testar-deye")
     def testar_deye():
-        return pagina_definicoes(sync.testar_ligacao())
-
-    @app.post("/definicoes/deye")
-    def guardar_deye():
-        f = request.form
-        if f.get("acao") == "apagar":
-            for k in ("app_id", "app_secret", "email", "password_sha256"):
-                db.guardar_segredo("deye_" + k, None)
-            flash("Dados da Deye apagados da app.", "ok")
-            return redirect(url_for("definicoes"))
-        app_id, email = f.get("app_id", "").strip(), f.get("email", "").strip()
-        app_secret, password = f.get("app_secret", "").strip(), f.get("password", "")
-        if not app_id or not email:
-            flash("Preenche o App ID e o email da Deye.", "erro")
-            return redirect(url_for("definicoes"))
-        if not app_secret and not db.segredo("deye_app_secret"):
-            flash("Falta o App Secret.", "erro")
-            return redirect(url_for("definicoes"))
-        if not password and not db.segredo("deye_password_sha256"):
-            flash("Falta a palavra-passe da Deye.", "erro")
-            return redirect(url_for("definicoes"))
-        db.guardar_segredo("deye_app_id", app_id)
-        db.guardar_segredo("deye_email", email)
-        if app_secret:
-            db.guardar_segredo("deye_app_secret", app_secret)
-        if password:  # só guardamos o SHA-256, que é o que a Deye pede
-            import hashlib
-            db.guardar_segredo("deye_password_sha256", hashlib.sha256(password.encode("utf-8")).hexdigest())
         return pagina_definicoes(sync.testar_ligacao())
 
     @app.post("/definicoes/senha")
@@ -607,8 +530,3 @@ def _num(v):
     except ValueError:
         return None
 
-
-def _mes_passado() -> str:
-    h = date.today().replace(day=1)
-    a, m = (h.year, h.month - 1) if h.month > 1 else (h.year - 1, 12)
-    return f"{a:04d}-{m:02d}"

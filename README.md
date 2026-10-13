@@ -4,7 +4,7 @@ Aplicação web para acompanhar quanto poupas com os painéis solares e quando c
 
 - Vai buscar os dados à **Deye Cloud** sozinha, uma vez por dia (API oficial).
 - **Contratos** de compra e de venda de energia, com preço do kWh, potência e data de início, editáveis na página.
-- **Faturas** reais por mês (opcional), para comparar com a estimativa.
+- **Faturas** da MEO Energia recebidas por email, para comparar com a estimativa.
 - Painel com poupança acumulada, % recuperada, break-even previsto, autossuficiência e gráficos.
 - Login com palavra-passe. Os dados ficam em Postgres (na Vercel) ou num ficheiro SQLite (no Docker).
 
@@ -19,7 +19,7 @@ Já vem com os teus contratos (MEO e venda do excedente), o investimento (3 979,
 1. Entra em **https://developer.deyecloud.com** com o mesmo email da app Deye Cloud.
 2. Cria uma aplicação (*Application*). Guarda o **App ID** e o **App Secret**.
 
-Sem isto a app funciona na mesma: escreves os meses à mão na página **Energia**.
+Estas credenciais ficam **só nas variáveis de ambiente** (`DEYE_APP_ID`, `DEYE_APP_SECRET`, `DEYE_EMAIL`, `DEYE_PASSWORD`), nunca na app nem na base de dados. Sem elas a app não recebe dados de energia; em **Definições** vês quais faltam.
 
 ## 2. Publicar na Vercel (recomendado, grátis)
 
@@ -97,7 +97,7 @@ Depois põe `COOKIE_SEGURO=1` no `.env` e reinicia. Não deixes a porta 8000 abe
 
 ## Faturas da MEO Energia
 
-As faturas vão de um dia a outro (ex.: 21/08 a 20/09), não de mês a mês. Para cada fatura, a app:
+As faturas chegam **por email** (ver abaixo) e a página **Faturas** só as lista. Vão de um dia a outro (ex.: 21/08 a 20/09), não de mês a mês. Para cada fatura, a app:
 
 - lê o PDF: período, kWh, preço do kWh, potência, CAV, IEC, DGEG, IVA e total (sem guardar nome, morada, NIF ou IBAN);
 - junta os dados **diários** da Deye desse período exato e refaz a fatura como se toda a energia viesse da rede;
@@ -109,9 +109,9 @@ Para as receber **por email**: em Definições → Faturas por email, liga a rec
 ## 3. Uso no dia a dia
 
 - **Mudaste de empresa ou de preço?** Em **Contratos**, adiciona um contrato novo com a data de início. Não apagues o antigo: os meses passados continuam com o preço que tinham.
-- **Chegou a fatura?** Larga o PDF em **Faturas** (ou deixa-a chegar por email).
+- **Chegou a fatura?** Se o reencaminhamento do email estiver ligado, aparece sozinha em **Faturas**.
 - **Investiste mais** (ex.: outra bateria)? Em **Definições**, atualiza o investimento total.
-- **Um mês está errado?** Em **Energia**, escreve-o à mão (fica fixo) ou apaga-o para voltar a vir da Deye.
+- **Um mês está errado?** Em **Energia**, apaga-o e carrega em **Atualizar da Deye**. Os meses marcados «À mão» (os iniciais) só passam a vir da Deye depois de apagados.
 
 ## Como se calcula
 

@@ -155,6 +155,13 @@ def iniciar() -> None:
         novo = con.um("SELECT COUNT(*) AS n FROM definicoes")["n"] == 0
         for k, v in DEFINICOES_INICIAIS.items():
             con.execute("INSERT INTO definicoes (chave, valor) VALUES (?, ?) ON CONFLICT (chave) DO NOTHING", (k, v))
+        # a data do investimento substituiu o "primeiro mês a funcionar": começa no dia 1 desse mês
+        mes = con.um("SELECT valor FROM definicoes WHERE chave = 'primeiro_mes'")["valor"]
+        con.execute("INSERT INTO definicoes (chave, valor) VALUES ('data_investimento', ?) ON CONFLICT (chave) DO NOTHING",
+                    (mes + "-01",))
+        # as credenciais da Deye passaram a vir só das variáveis de ambiente: apagar as que ficaram guardadas
+        con.execute("DELETE FROM definicoes WHERE chave IN ('_deye_app_id', '_deye_app_secret', '_deye_email', "
+                    "'_deye_password_sha256')")
         if novo and os.environ.get("SEM_DADOS_INICIAIS") != "1":
             _dados_iniciais(con)
 
@@ -186,6 +193,12 @@ def definicoes() -> dict[str, str]:
     with ligar() as con:
         return {r["chave"]: r["valor"] for r in con.execute("SELECT chave, valor FROM definicoes")
                 if not r["chave"].startswith("_")}
+
+
+def primeiro_mes() -> str:
+    """Mês (AAAA-MM) a partir do qual se contam os dados: o da data do investimento."""
+    d = definicoes()
+    return (d.get("data_investimento") or d["primeiro_mes"])[:7]
 
 
 def segredo(chave: str) -> str | None:

@@ -176,14 +176,17 @@ def test_paginas_e_formularios(cliente):
     dados = c.get("/api/dados").get_json()
     assert [m["empresa_compra"] for m in dados["meses"]] == ["MEO Energia", "MEO Energia", "EDP"]
 
-    c.post("/faturas", data={"csrf": t, "inicio": "2026-08-01", "fim": "2026-08-31", "kwh": "48", "total_eur": "25,10"})
-    dados = c.get("/api/dados").get_json()
-    assert dados["meses"][1]["fatura_com"] == 25.10
+    # faturas e meses já não se escrevem à mão
+    assert c.post("/faturas", data={"csrf": t, "inicio": "2026-08-01"}).status_code == 405
+    assert c.post("/meses", data={"csrf": t, "mes": "2026-08"}).status_code == 405
+    assert 'type="file"' not in c.get("/faturas").get_data(as_text=True)
 
-    c.post("/definicoes", data={"csrf": t, "investimento_eur": "4500", "primeiro_mes": "2026-07",
+    assert c.get("/api/dados").get_json()["definicoes"]["data_investimento"] == "2026-07-01"
+    c.post("/definicoes", data={"csrf": t, "investimento_eur": "4500", "data_investimento": "2026-06-15",
                                 "iva_reduzido": "6", "iva_normal": "23", "limite_iva_kwh_30dias": "200"})
     d = c.get("/api/dados").get_json()["definicoes"]
     assert float(d["investimento_eur"]) == 4500 and float(d["iva_reduzido"]) == 0.06
+    assert d["data_investimento"] == "2026-06-15" and d["primeiro_mes"] == "2026-06"
 
 
 def test_sincronizacao_deye_mantem_meses_a_mao(cliente):
@@ -290,7 +293,7 @@ def test_testar_ligacao(cliente):
     assert "Ligação a funcionar" in html and "Casa" in html
 
 
-def test_sem_variaveis_cria_senha_e_deye_pela_app(cliente, monkeypatch):
+def test_sem_variaveis_cria_senha_e_pede_as_da_deye(cliente, monkeypatch):
     c = cliente
     for k in ("APP_PASSWORD", "DEYE_APP_ID", "DEYE_APP_SECRET", "DEYE_EMAIL", "DEYE_PASSWORD", "CRON_SECRET"):
         monkeypatch.delenv(k, raising=False)
@@ -306,16 +309,15 @@ def test_sem_variaveis_cria_senha_e_deye_pela_app(cliente, monkeypatch):
     assert c.post("/login", data={"senha": "zzzzzzzz"}).status_code == 200  # errada
     assert c.post("/login", data={"senha": "abcdefgh"}).status_code == 302
 
-    # Deye pelo formulário
+    # sem as variáveis DEYE_* não há ligação, e a página diz quais faltam (não há formulário)
+    html = c.get("/definicoes").get_data(as_text=True)
+    assert "DEYE_APP_SECRET" in html and 'name="app_secret"' not in html
     t = csrf(c, "/definicoes")
-    html = c.post("/definicoes/deye", data={"csrf": t, "app_id": "id", "app_secret": "s", "email": "eu@x.pt",
-                                            "password": "pw", "acao": "guardar"}).get_data(as_text=True)
-    assert "Ligação a funcionar" in html
-    import hashlib
-    from app import db
-    assert db.segredo("deye_password_sha256") == hashlib.sha256(b"pw").hexdigest()
+    assert "variáveis DEYE_*" in c.post("/sincronizar", data={"csrf": t}, follow_redirects=True).get_data(as_text=True)
+    for k, v in {"DEYE_APP_ID": "id", "DEYE_APP_SECRET": "s", "DEYE_EMAIL": "eu@x.pt", "DEYE_PASSWORD": "pw"}.items():
+        monkeypatch.setenv(k, v)
     dados = json.dumps(c.get("/api/dados").get_json())
-    assert "senha_hash" not in dados and "deye_app_secret" not in dados and "secret_key" not in dados
+    assert "senha_hash" not in dados and "secret_key" not in dados
     r = c.post("/sincronizar", data={"csrf": t}, follow_redirects=True)
     assert "Atualizado da Deye" in r.get_data(as_text=True)
 
@@ -373,17 +375,18 @@ def test_carregar_pdf_e_email(cliente, monkeypatch):
     t = csrf(c)
     c.post("/sincronizar", data={"csrf": t, "completo": "1"})  # dados diários da Deye simulada
     import io
-    r = c.post("/faturas", data={"csrf": t, "pdf": (io.BytesIO(b"PDF-AGO"), "agosto.pdf")},
-               content_type="multipart/form-data", follow_redirects=True)
-    html = r.get_data(as_text=True)
-    assert "FA ME26/1 885 673" in html and "39,30 €" in html and "Poupaste" in html
-    assert "mercado regulado" in html and "bi-horária" not in html  # 26 de 63 kWh em vazio: menos de metade
-
     # por email: endereço secreto
     c.post("/definicoes/email", data={"csrf": t, "acao": "novo"})
     from app import db
     token = db.segredo("email_token")
     assert c.post("/api/email/faturas/errado", json={}).status_code == 404
+    r = c.post(f"/api/email/faturas/{token}", data={"subject": "Fatura", "anexo": (io.BytesIO(b"PDF-AGO"), "agosto.pdf")},
+               content_type="multipart/form-data")
+    assert "FA ME26/1 885 673" in r.get_json()["faturas"][0]
+    html = c.get("/faturas").get_data(as_text=True)
+    assert "FA ME26/1 885 673" in html and "39,30 €" in html and "Poupaste" in html
+    assert "mercado regulado" in html and "bi-horária" not in html  # 26 de 63 kWh em vazio: menos de metade
+
     corpo = {"headers": {"subject": "A sua fatura MEO Energia", "from": "faturas@meoenergia.pt"}, "plain": "Olá",
              "attachments": [{"file_name": "fatura.pdf", "content_type": "application/pdf",
                               "content": base64.b64encode(b"PDF-SET").decode()}]}

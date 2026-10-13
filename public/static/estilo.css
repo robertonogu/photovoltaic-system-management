@@ -224,6 +224,9 @@ th:last-child, td:last-child { padding-right: 0; }
 .campo small { color: var(--tinta-3); font-size: .8rem; }
 .campo[hidden] { display: none; }
 input, select { font: inherit; color: var(--tinta); background: var(--ceu); border: 1px solid var(--linha); border-radius: var(--r-pequeno); padding: .7rem .8rem; width: 100%; min-width: 0; }
+/* a mesma altura em todos (os de data trazem o botão do calendário e ficavam mais altos ou mais baixos) */
+input:not([type=radio]):not([type=checkbox]):not([type=file]), select { line-height: 1.5; height: calc(1.5em + 1.4rem + 2px); }
+input::-webkit-date-and-time-value { text-align: left; }
 input:focus { outline: 2px solid var(--foco); outline-offset: 0; border-color: transparent; background: var(--superficie); }
 .com-unidade { position: relative; }
 .com-unidade input { padding-right: 4.2rem; }
@@ -293,15 +296,7 @@ input:focus { outline: 2px solid var(--foco); outline-offset: 0; border-color: t
 code { font-size: .85em; background: var(--ceu-2); padding: .05rem .35rem; border-radius: 5px; }
 
 /* ---------- faturas ---------- */
-.largar-zona { display: grid; justify-items: center; gap: .35rem; text-align: center; padding: 2rem 1rem; border: 2px dashed var(--linha); border-radius: var(--r-medio); cursor: pointer; color: var(--tinta-2); background: var(--ceu); }
-.largar-zona .icone { width: 2rem; height: 2rem; color: var(--sol-forte); }
-.largar-zona b { color: var(--tinta); font-weight: 600; }
-.largar-zona span { font-size: .88rem; }
-.largar-zona input { position: absolute; width: 1px; height: 1px; opacity: 0; }
-.largar-zona:hover, .largar-zona.por-cima { border-color: var(--sol); background: var(--sol-suave); }
-.largar-zona:focus-within { outline: 2px solid var(--foco); outline-offset: 2px; }
-.largar-zona.a-enviar .icone { animation: rodar 1.2s linear infinite; }
-details.manual, details.detalhe { margin-top: 1rem; }
+details.detalhe { margin-top: 1rem; }
 details summary { cursor: pointer; color: var(--tinta-2); font-size: .9rem; font-weight: 500; }
 details summary:hover { color: var(--tinta); }
 details[open] summary { margin-bottom: .9rem; }

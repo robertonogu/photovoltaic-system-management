@@ -13,8 +13,9 @@
         <label class="campo"><span>Investimento total</span>
           <span class="com-unidade"><input name="investimento_eur" inputmode="decimal" required value="{{ defs.investimento_eur|simples }}"><em>€</em></span>
           <small>Se investires mais, soma aqui.</small></label>
-        <label class="campo"><span>Primeiro mês a funcionar</span>
-          <input type="month" name="primeiro_mes" required value="{{ defs.primeiro_mes }}"></label>
+        <label class="campo"><span>Data do investimento</span>
+          <input type="date" name="data_investimento" required value="{{ defs.data_investimento }}">
+          <small>Os dados contam a partir deste mês.</small></label>
       </div>
       <h2 style="margin-top:.5rem">IVA da energia</h2>
       <div class="grelha-campos">
@@ -66,7 +67,7 @@
           <button class="botao leve">{{ icone("ok") }} Testar ligação</button>
         </form>
         <form method="post" action="{{ url_for('sincronizar') }}" data-sync
-              onsubmit="return confirm('Reler todos os meses desde {{ defs.primeiro_mes|mes }}? Os meses escritos à mão não mudam.')">
+              onsubmit="return confirm('Reler todos os meses desde {{ primeiro_mes|mes }}?')">
           <input type="hidden" name="csrf" value="{{ csrf }}">
           <input type="hidden" name="completo" value="1">
           <button class="botao leve">{{ icone("atualizar") }} Reler todo o histórico</button>
@@ -74,27 +75,12 @@
       </div>
     {% endif %}
 
-    {% if deye_origem == 'variaveis' %}
-      <p class="nota-texto">As credenciais vêm das variáveis do servidor (<code>DEYE_*</code>).</p>
+    {% if deye_em_falta %}
+      <p class="nota-texto">As credenciais da Deye ficam só nas variáveis de ambiente do servidor (na Vercel: Settings → Environment Variables; no Docker: ficheiro <code>.env</code>), nunca na app. Faltam:</p>
+      <ul class="lista">{% for v in deye_em_falta %}<li><div class="principal"><code>{{ v }}</code></div></li>{% endfor %}</ul>
+      <p class="nota-texto">O App ID e o App Secret vêm de uma aplicação criada em <b>developer.deyecloud.com</b> (com o mesmo email da app Deye Cloud); o email e a palavra-passe são os da app Deye Cloud. Depois de as definir, volta a publicar a app.</p>
     {% else %}
-      <form method="post" action="{{ url_for('guardar_deye') }}" class="form" style="margin-top:1.25rem">
-        <input type="hidden" name="csrf" value="{{ csrf }}">
-        {% if not deye_ok %}<p class="nota-texto" style="margin-top:0">Cria uma aplicação em <b>developer.deyecloud.com</b> (com o mesmo email da app Deye Cloud) e copia para aqui o App ID e o App Secret.</p>{% endif %}
-        <div class="grelha-campos">
-          <label class="campo"><span>App ID</span><input name="app_id" required value="{{ deye_app_id }}" autocomplete="off"></label>
-          <label class="campo"><span>App Secret</span><input name="app_secret" type="password" autocomplete="off"
-            {% if not deye_ok %}required{% endif %} placeholder="{{ '•••••• guardado' if deye_ok else '' }}"></label>
-          <label class="campo"><span>Email da app Deye</span><input name="email" type="email" required value="{{ deye_email }}" autocomplete="off"></label>
-          <label class="campo"><span>Palavra-passe da app Deye</span><input name="password" type="password" autocomplete="off"
-            {% if not deye_ok %}required{% endif %} placeholder="{{ '•••••• guardada' if deye_ok else '' }}"></label>
-        </div>
-        <p class="nota-texto" style="margin-top:0">Da palavra-passe só fica guardada uma impressão digital (SHA-256), que é o que a Deye pede. {% if deye_ok %}Deixa os campos com •••••• vazios para manter os valores atuais.{% endif %}</p>
-        <div class="acoes" style="margin-top:0">
-          <button class="botao sol" name="acao" value="guardar">{{ icone("ok") }} Guardar e testar ligação</button>
-          {% if deye_ok %}<button class="botao leve" name="acao" value="apagar" formnovalidate
-            onclick="return confirm('Apagar os dados da Deye desta app?')">{{ icone("lixo") }} Apagar</button>{% endif %}
-        </div>
-      </form>
+      <p class="nota-texto">As credenciais vêm das variáveis de ambiente do servidor (<code>DEYE_*</code>).</p>
     {% endif %}
   </section>
 
@@ -131,7 +117,7 @@
         <button class="botao leve pequeno" name="acao" value="desligar">Desligar</button>
       </form>
     {% else %}
-      <p class="nota-texto" style="margin-top:0">Reencaminha os emails da MEO Energia com a fatura em PDF e a app lê-a sozinha: período, kWh, preços, taxas e total. Só funciona se o email trouxer o PDF em anexo; se trouxer só um link, larga o PDF na página Faturas.</p>
+      <p class="nota-texto" style="margin-top:0">Reencaminha os emails da MEO Energia com a fatura em PDF e a app lê-a sozinha: período, kWh, preços, taxas e total. Só funciona se o email trouxer o PDF em anexo.</p>
       <form method="post" action="{{ url_for('ativar_email') }}" class="acoes">
         <input type="hidden" name="csrf" value="{{ csrf }}">
         <button class="botao sol" name="acao" value="novo">{{ icone("fatura") }} Ligar faturas por email</button>

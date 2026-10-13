@@ -16,19 +16,19 @@ _lock = threading.Lock()
 
 
 def credenciais() -> dict | None:
-    """Credenciais da Deye: primeiro das variáveis de ambiente, senão as guardadas em Definições."""
+    """Credenciais da Deye: só das variáveis de ambiente (nunca ficam na base de dados)."""
     e = os.environ
-    if all(e.get(k) for k in ("DEYE_APP_ID", "DEYE_APP_SECRET", "DEYE_EMAIL", "DEYE_PASSWORD")):
+    if all(e.get(k) for k in VARIAVEIS_DEYE):
         return {"app_id": e["DEYE_APP_ID"], "app_secret": e["DEYE_APP_SECRET"], "login": e["DEYE_EMAIL"],
-                "password": e["DEYE_PASSWORD"], "origem": "variaveis"}
-    try:
-        g = {k: db.segredo("deye_" + k) for k in ("app_id", "app_secret", "email", "password_sha256")}
-    except Exception:  # noqa: BLE001 — BD ainda não pronta
-        return None
-    if all(g.values()):
-        return {"app_id": g["app_id"], "app_secret": g["app_secret"], "login": g["email"],
-                "password_sha256": g["password_sha256"], "origem": "app"}
+                "password": e["DEYE_PASSWORD"]}
     return None
+
+
+VARIAVEIS_DEYE = ("DEYE_APP_ID", "DEYE_APP_SECRET", "DEYE_EMAIL", "DEYE_PASSWORD")
+
+
+def variaveis_em_falta() -> list[str]:
+    return [k for k in VARIAVEIS_DEYE if not os.environ.get(k)]
 
 
 def configurado() -> bool:
@@ -42,7 +42,7 @@ def cliente() -> DeyeCloud:
     return DeyeCloud(
         base_url=os.environ.get("DEYE_BASE_URL", "https://eu1-developer.deyecloud.com/v1.0"),
         app_id=c["app_id"], app_secret=c["app_secret"], login=c["login"],
-        password=c.get("password"), password_sha256=c.get("password_sha256"),
+        password=c["password"],
         station_id=os.environ.get("DEYE_STATION_ID") or None,
     )
 
@@ -59,11 +59,11 @@ def sincronizar(completo: bool = False) -> tuple[bool, str]:
     (também acontece sozinho na primeira vez).
     """
     if not configurado():
-        return False, "A ligação à Deye não está configurada. Preenche os dados em Definições."
+        return False, "A ligação à Deye não está configurada: faltam as variáveis DEYE_* no servidor."
     if not _lock.acquire(blocking=False):
         return False, "Já está a decorrer uma atualização."
     try:
-        primeiro = db.definicoes().get("primeiro_mes", "2026-07")
+        primeiro = db.primeiro_mes()
         with db.ligar() as con:
             ja_tem_deye = con.um("SELECT COUNT(*) AS n FROM meses WHERE origem = 'deye'")["n"] > 0
         inicio = primeiro if (completo or not ja_tem_deye) else max(primeiro, somar_meses(_mes_atual(), -1))
@@ -134,7 +134,7 @@ def _guardar_dias(c, inicio: str) -> None:
 def testar_ligacao() -> dict:
     """Entra na Deye e devolve as instalações e os totais do mês anterior, sem gravar nada."""
     if not configurado():
-        return {"ok": False, "erro": "Preenche primeiro os dados da Deye em Definições."}
+        return {"ok": False, "erro": "Faltam as variáveis DEYE_* no servidor."}
     try:
         c = cliente()
         c.autenticar()
