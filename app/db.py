@@ -71,6 +71,12 @@ def _esquema(pg: bool) -> list[str]:
             iva_eur {real}, total_eur {real} NOT NULL,
             extra_vs_regulado_eur {real}, leitura TEXT, kwh_vazio {real},
             origem TEXT NOT NULL DEFAULT 'pdf', recebida TEXT NOT NULL)""",
+        f"""CREATE TABLE IF NOT EXISTS faturas_venda (
+            numero TEXT PRIMARY KEY,
+            comercializador TEXT, emitida TEXT,
+            inicio TEXT NOT NULL, fim TEXT NOT NULL, dias INTEGER NOT NULL,
+            kwh {real} NOT NULL, preco_kwh {real}, total_eur {real} NOT NULL,
+            origem TEXT NOT NULL DEFAULT 'pdf', recebida TEXT NOT NULL)""",
         """CREATE TABLE IF NOT EXISTS emails_recebidos (
             id """ + idauto + """,
             quando TEXT NOT NULL, remetente TEXT, assunto TEXT, resumo TEXT, resultado TEXT)""",
@@ -227,13 +233,19 @@ CAMPOS_FATURA = ("numero", "comercializador", "emitida", "inicio", "fim", "dias"
                  "outros_eur", "iva_eur", "total_eur", "extra_vs_regulado_eur", "leitura", "kwh_vazio", "origem")
 
 
+CAMPOS_VENDA = ("numero", "comercializador", "emitida", "inicio", "fim", "dias", "kwh", "preco_kwh", "total_eur", "origem")
+
+
 def guardar_fatura(f: dict) -> bool:
-    """Guarda (ou substitui) uma fatura pelo número. Devolve True se era nova."""
+    """Guarda (ou substitui) uma fatura pelo número: as de venda (autofaturas) numa tabela à parte.
+
+    Devolve True se era nova."""
+    tabela, campos = ("faturas_venda", CAMPOS_VENDA) if f.get("tipo") == "venda" else ("faturas_periodo", CAMPOS_FATURA)
     with ligar() as con:
-        nova = con.um("SELECT numero FROM faturas_periodo WHERE numero = ?", (f["numero"],)) is None
-        valores = [f.get(k) for k in CAMPOS_FATURA] + [agora()]
-        cols = ", ".join(CAMPOS_FATURA) + ", recebida"
+        nova = con.um(f"SELECT numero FROM {tabela} WHERE numero = ?", (f["numero"],)) is None
+        valores = [f.get(k) for k in campos] + [agora()]
+        cols = ", ".join(campos) + ", recebida"
         marc = ", ".join("?" for _ in valores)
-        upd = ", ".join(f"{k} = excluded.{k}" for k in CAMPOS_FATURA if k != "numero")
-        con.execute(f"INSERT INTO faturas_periodo ({cols}) VALUES ({marc}) ON CONFLICT (numero) DO UPDATE SET {upd}", valores)
+        upd = ", ".join(f"{k} = excluded.{k}" for k in campos if k != "numero")
+        con.execute(f"INSERT INTO {tabela} ({cols}) VALUES ({marc}) ON CONFLICT (numero) DO UPDATE SET {upd}", valores)
         return nova

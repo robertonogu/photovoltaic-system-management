@@ -236,7 +236,10 @@
           padding: 10, cornerRadius: 8, boxPadding: 4,
           callbacks: {
             title: (it) => { const d = dados[it[0].dataIndex]; return MESES[+d.mes.slice(5) - 1] + ' ' + d.mes.slice(0, 4); },
-            label: (c) => ' ' + c.dataset.label + ': ' + eur.format(c.parsed.y),
+            label: (c) => {
+              const v = c.datasetIndex === 1 ? dados[c.dataIndex].venda_real : null;
+              return ' ' + c.dataset.label + (v === 'total' ? ' (autofatura)' : v === 'parcial' ? ' (em parte autofatura)' : '') + ': ' + eur.format(c.parsed.y);
+            },
             footer: (it) => 'Total: ' + eur.format(dados[it[0].dataIndex].poupanca_eur),
           },
         },

@@ -15,7 +15,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from . import db, sync
 from . import faturas_meo
 from .calc import (Contrato, Impostos, calcular, calcular_periodo, em_vigor, energia_no_periodo, faturas_por_mes,
-                   resumo)
+                   resumo, vendas_por_mes)
 
 MESES_LONGOS = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro",
                 "outubro", "novembro", "dezembro"]
@@ -239,11 +239,13 @@ def _criar_app() -> Flask:
             contratos = con.execute("SELECT * FROM contratos ORDER BY desde DESC, id DESC")
             faturas = {r["mes"]: r["total_eur"] for r in con.execute("SELECT mes, total_eur FROM faturas")}
             periodos = con.execute("SELECT * FROM faturas_periodo ORDER BY inicio")
+            autofaturas = con.execute("SELECT * FROM faturas_venda ORDER BY inicio")
+            dias = {r["data"]: r for r in con.execute("SELECT * FROM dias")} if autofaturas else {}
         faturas.update(faturas_por_mes(periodos))
         imp = Impostos(float(d["iva_reduzido"]), float(d["iva_normal"]), float(d["limite_iva_kwh_30dias"]))
         objs = [Contrato(c["tipo"], c["empresa"], c["desde"], c["preco_kwh"], c["potencia_eur_dia"] or 0,
                          c["iva_potencia"]) for c in contratos]
-        res = calcular(meses, objs, faturas, imp, date.today())
+        res = calcular(meses, objs, faturas, imp, date.today(), vendas_por_mes(autofaturas, dias))
         inv = float(d["investimento_eur"])
         return d, meses, contratos, faturas, res, resumo(res, inv)
 
@@ -351,6 +353,29 @@ def _criar_app() -> Flask:
             out.append(r)
         return out
 
+    def autofaturas_calculadas():
+        """Autofaturas de venda, comparadas com a energia injetada que a Deye mediu no mesmo período."""
+        _, meses, contratos, _, _, _ = carregar()
+        objs = [Contrato(c["tipo"], c["empresa"], c["desde"], c["preco_kwh"], c["potencia_eur_dia"] or 0,
+                         c["iva_potencia"]) for c in contratos]
+        with db.ligar() as con:
+            lista = con.execute("SELECT * FROM faturas_venda ORDER BY inicio DESC")
+            dias = {r["data"]: r for r in con.execute("SELECT * FROM dias")} if lista else {}
+        out = []
+        for f in lista:
+            r = dict(f)
+            venda = em_vigor(objs, "venda", f["inicio"][:7])
+            e = energia_no_periodo(f["inicio"], f["fim"], dias, meses)
+            r["fonte"] = e["fonte"]
+            if e["fonte"]:
+                r["deye_kwh"] = round(e["injetado_kwh"], 1)
+                r["estimado_eur"] = round(e["injetado_kwh"] * (venda.preco_kwh if venda else 0), 2)
+                r["variacao"] = (e["injetado_kwh"] - f["kwh"]) / f["kwh"] if f["kwh"] else None
+            r["contrato"] = venda.empresa if venda else None
+            r["preco_diferente"] = bool(venda) and abs((f["preco_kwh"] or 0) - venda.preco_kwh) > 0.00005
+            out.append(r)
+        return out
+
     def guardar_fatura_pdf(dados: bytes, origem: str) -> tuple[bool, str]:
         try:
             f = faturas_meo.ler_pdf(dados, db.segredo("pdf_senha"))
@@ -361,6 +386,11 @@ def _criar_app() -> Flask:
             return False, f"Não consegui ler o PDF ({type(e).__name__}: {e})."
         f["origem"] = origem
         nova = db.guardar_fatura(f)
+        periodo = f"({f['inicio'][8:]}/{f['inicio'][5:7]} a {f['fim'][8:]}/{f['fim'][5:7]})"
+        if f.get("tipo") == "venda":
+            aviso = "" if f.get("confere", True) else " Atenção: o total não bate com a linha do excedente; confirma os valores."
+            return True, (f"Autofatura {f['numero']} {periodo} " + ("lida" if nova else "atualizada")
+                          + f": {f['kwh']:.0f} kWh injetados, a receber {f['total_eur']:.2f} €.".replace(".", ",", 1) + aviso)
         aviso = "" if f.get("confere", True) else " Atenção: o IVA lido não bate certo; confirma os valores."
         return True, (f"Fatura {f['numero']} ({f['inicio'][8:]}/{f['inicio'][5:7]} a {f['fim'][8:]}/{f['fim'][5:7]}) "
                       + ("lida" if nova else "atualizada") + f": {f['kwh']:.0f} kWh, total {f['total_eur']:.2f} €.".replace(".", ",", 1) + aviso)
@@ -368,23 +398,37 @@ def _criar_app() -> Flask:
     @app.get("/faturas")
     def faturas():
         token = db.segredo("email_token")
+        venda = request.args.get("tipo") == "venda"
         with db.ligar() as con:
-            antigas = con.execute("SELECT * FROM faturas ORDER BY mes DESC")
-        return render_template("faturas.html", faturas=faturas_calculadas(), antigas=antigas, email_ativo=bool(token))
+            antigas = [] if venda else con.execute("SELECT * FROM faturas ORDER BY mes DESC")
+            n_compra = con.um("SELECT COUNT(*) AS n FROM faturas_periodo")["n"]
+            n_venda = con.um("SELECT COUNT(*) AS n FROM faturas_venda")["n"]
+        return render_template("faturas.html", tipo="venda" if venda else "compra",
+                               faturas=[] if venda else faturas_calculadas(),
+                               autofaturas=autofaturas_calculadas() if venda else [],
+                               n_compra=n_compra, n_venda=n_venda, antigas=antigas, email_ativo=bool(token))
 
     @app.post("/faturas/<path:numero>/apagar")
     def apagar_fatura(numero):
         with db.ligar() as con:
+            venda = con.um("SELECT numero FROM faturas_venda WHERE numero = ?", (numero,)) is not None
             con.execute("DELETE FROM faturas_periodo WHERE numero = ?", (numero,))
+            con.execute("DELETE FROM faturas_venda WHERE numero = ?", (numero,))
             con.execute("DELETE FROM faturas WHERE mes = ?", (numero,))  # faturas mensais antigas
         flash("Fatura apagada.", "ok")
-        return redirect(url_for("faturas"))
+        return redirect(url_for("faturas", tipo="venda") if venda else url_for("faturas"))
 
     @app.post("/faturas/<path:numero>/criar-contrato")
     def contrato_da_fatura(numero):
         with db.ligar() as con:
             f = con.um("SELECT * FROM faturas_periodo WHERE numero = ?", (numero,))
-            if f:
+            v = None if f else con.um("SELECT * FROM faturas_venda WHERE numero = ?", (numero,))
+            if v:
+                con.execute("INSERT INTO contratos (tipo, empresa, desde, preco_kwh, potencia_eur_dia, iva_potencia, notas) "
+                            "VALUES ('venda', ?, ?, ?, 0, NULL, ?)",
+                            (v["comercializador"] or "MEO Energia", v["inicio"], v["preco_kwh"], f"Preço da autofatura {numero}"))
+                f = v
+            elif f:
                 con.execute("INSERT INTO contratos (tipo, empresa, desde, preco_kwh, potencia_eur_dia, iva_potencia, notas) "
                             "VALUES ('compra', ?, ?, ?, ?, ?, ?)",
                             (f["comercializador"] or "MEO Energia", f["inicio"], f["preco_kwh"], f["potencia_eur_dia"] or 0,

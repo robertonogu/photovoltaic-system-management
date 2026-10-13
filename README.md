@@ -104,6 +104,8 @@ As faturas chegam **por email** (ver abaixo) e a página **Faturas** só as list
 - avisa se o preço mudou face ao contrato (e cria o contrato novo com um clique), se a leitura foi estimada, quanto pagarias no mercado regulado e se compensaria uma tarifa bi-horária;
 - reparte o total pelos meses, para o painel mensal usar a fatura real quando o mês está todo coberto.
 
+As **autofaturas de venda** do excedente (o que a MEO te paga pela energia injetada) também chegam por email e ficam no separador **Venda**. A app compara os kWh com a energia injetada que a Deye mediu e, na poupança, usa o valor real recebido em vez da estimativa (repartido pelos meses conforme a energia injetada em cada dia).
+
 Para as receber **por email**: em Definições → Faturas por email, liga a receção e segue os passos (um serviço como o CloudMailin transforma o email num pedido para a app; no Gmail, um filtro reencaminha os emails da MEO).
 
 ## 3. Uso no dia a dia

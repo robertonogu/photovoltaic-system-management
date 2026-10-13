@@ -412,3 +412,69 @@ def test_reler_historico_depois_de_testar_ligacao(cliente):
     assert r.status_code == 302 and r.headers["Location"].endswith("/definicoes")
     assert c.get("/definicoes/testar-deye").status_code == 302  # abrir o endereço diretamente já não dá 405
     assert c.get("/sincronizar").status_code == 302
+
+
+# ---------- autofaturas de venda ----------
+def test_ler_autofatura_meo():
+    from app.faturas_meo import ler
+    a = ler(texto("meo_autofatura_2026-09.txt"))
+    assert a["tipo"] == "venda" and a["numero"] == "FT AFAT.0ODA0/1" and a["emitida"] == "2026-10-07"
+    assert (a["inicio"], a["fim"], a["dias"]) == ("2026-07-21", "2026-09-30", 72)
+    assert (a["kwh"], a["preco_kwh"], a["total_eur"]) == (404.21, 0.06, 24.25) and a["confere"]
+    assert ler(texto("meo_2026-09.txt"))["tipo"] == "compra"
+
+
+def test_vendas_por_mes():
+    from app.calc import vendas_por_mes
+    af = [{"inicio": "2026-07-21", "fim": "2026-09-30", "total_eur": 24.25}]
+    # sem dados diários: por igual pelos 72 dias
+    v = vendas_por_mes(af, {})
+    assert v["2026-07"] == {"eur": round(24.25 * 11 / 72, 2), "fracao": round(11 / 31, 4)}
+    assert v["2026-08"]["fracao"] == 1 and v["2026-09"]["eur"] == round(24.25 * 30 / 72, 2)
+    # com dados diários: pela energia injetada em cada dia (agosto com o dobro do sol de julho e setembro)
+    from datetime import date, timedelta
+    dias, d = {}, date(2026, 7, 1)
+    while d <= date(2026, 9, 30):
+        dias[d.isoformat()] = {"injetado_kwh": 10 if d.month == 8 else 5}
+        d += timedelta(days=1)
+    v = vendas_por_mes(af, dias)
+    total = 11 * 5 + 31 * 10 + 30 * 5
+    assert v["2026-08"]["eur"] == round(24.25 * 310 / total, 2)
+    assert v["2026-07"]["fracao"] == round(55 / 155, 4)
+    # na poupança: julho só tem 11 dias cobertos, o resto continua estimado
+    res = calcular(linhas(), [MEO, VENDA], {}, Impostos(), date(2026, 10, 12), v)
+    jul, ago = res[0], res[1]
+    assert ago["venda_eur"] == v["2026-08"]["eur"] and ago["venda_real"] == "total"
+    assert jul["venda_real"] == "parcial"
+    assert jul["venda_eur"] == round(v["2026-07"]["eur"] + 40.59 * 0.06 * (1 - v["2026-07"]["fracao"]), 2)
+
+
+def test_autofatura_por_email(cliente, monkeypatch):
+    import base64
+    from app import db, faturas_meo
+    monkeypatch.setattr(faturas_meo, "texto_do_pdf", lambda dados, senha=None: texto("meo_autofatura_2026-09.txt"))
+    c = cliente
+    entrar(c)
+    t = csrf(c)
+    c.post("/sincronizar", data={"csrf": t, "completo": "1"})
+    c.post("/definicoes/email", data={"csrf": t, "acao": "novo"})
+    token = db.segredo("email_token")
+    corpo = {"headers": {"subject": "Autofatura"}, "attachments": [
+        {"file_name": "auto.pdf", "content_type": "application/pdf", "content": base64.b64encode(b"x").decode()}]}
+    r = c.post(f"/api/email/faturas/{token}", json=corpo)
+    assert "Autofatura FT AFAT.0ODA0/1" in r.get_json()["faturas"][0] and "404 kWh injetados" in r.get_json()["faturas"][0]
+
+    # fica no separador Venda, não no de Consumo
+    assert "FT AFAT.0ODA0/1" not in c.get("/faturas").get_data(as_text=True)
+    html = c.get("/faturas?tipo=venda").get_data(as_text=True)
+    assert "24,25 €" in html and "FT AFAT.0ODA0/1" in html
+    # Deye simulada: 7 kWh injetados × 72 dias = 504 kWh, +25 % face à autofatura (vermelho)
+    assert "autofatura <b>404 kWh</b> · Deye <b>504 kWh</b>" in html
+    assert re.search(r'etiqueta perigo"[^>]*>\s*\+25 %', html)
+
+    # agosto (todo coberto) passa a usar o valor real da autofatura
+    meses = {m["mes"]: m for m in c.get("/api/dados").get_json()["meses"]}
+    assert meses["2026-08"]["venda_real"] == "total" and meses["2026-08"]["venda_eur"] == round(24.25 * 31 / 72, 2)
+
+    c.post("/faturas/FT AFAT.0ODA0/1/apagar", data={"csrf": t})
+    assert "FT AFAT.0ODA0/1" not in c.get("/faturas?tipo=venda").get_data(as_text=True)

@@ -117,7 +117,7 @@
         <button class="botao leve pequeno" name="acao" value="desligar">Desligar</button>
       </form>
     {% else %}
-      <p class="nota-texto" style="margin-top:0">Reencaminha os emails da MEO Energia com a fatura em PDF e a app lê-a sozinha: período, kWh, preços, taxas e total. Só funciona se o email trouxer o PDF em anexo.</p>
+      <p class="nota-texto" style="margin-top:0">Reencaminha os emails da MEO Energia com a fatura em PDF e a app lê-a sozinha: período, kWh, preços, taxas e total. As autofaturas de venda do excedente também são reconhecidas e ficam à parte. Só funciona se o email trouxer o PDF em anexo.</p>
       <form method="post" action="{{ url_for('ativar_email') }}" class="acoes">
         <input type="hidden" name="csrf" value="{{ csrf }}">
         <button class="botao sol" name="acao" value="novo">{{ icone("fatura") }} Ligar faturas por email</button>

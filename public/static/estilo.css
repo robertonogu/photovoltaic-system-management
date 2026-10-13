@@ -302,6 +302,7 @@ details summary { cursor: pointer; color: var(--tinta-2); font-size: .9rem; font
 details summary:hover { color: var(--tinta); }
 details[open] summary { margin-bottom: .9rem; }
 .comparacao { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--linha); border-radius: var(--r-medio); overflow: hidden; }
+.comparacao.duas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .comp-col { padding: 1rem 1.1rem; display: grid; gap: .15rem; align-content: start; }
 .comp-col + .comp-col { border-left: 1px solid var(--linha); }
 .comp-col .lbl { font-size: .85rem; color: var(--tinta-2); }
@@ -311,13 +312,17 @@ details[open] summary { margin-bottom: .9rem; }
 .comp-col.destaque { background: color-mix(in srgb, var(--ganho) 8%, transparent); }
 .comp-col.destaque .grande { color: var(--ganho); }
 @media (max-width: 640px) {
-  .comparacao { grid-template-columns: 1fr; }
+  .comparacao, .comparacao.duas { grid-template-columns: 1fr; }
   .comp-col + .comp-col { border-left: 0; border-top: 1px solid var(--linha); }
 }
 .detalhe table td { text-align: right; }
 .detalhe table td:first-child { text-align: left; }
 .detalhe table td:nth-child(2) { color: var(--tinta-3); }
 .detalhe tr.soma td { font-weight: 600; }
+.separadores { display: inline-flex; gap: 4px; background: var(--ceu); border-radius: 12px; padding: 4px; border: 1px solid var(--linha); margin-bottom: 1rem; max-width: 100%; }
+.separadores a { display: flex; align-items: center; gap: .45rem; padding: .5rem .9rem; border-radius: 9px; font-weight: 500; color: var(--tinta-2); font-size: .93rem; text-decoration: none; }
+.separadores a[aria-current=page] { background: var(--superficie); color: var(--tinta); box-shadow: var(--sombra); }
+.separadores a:focus-visible { outline: 2px solid var(--foco); }
 .conferir { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .6rem; margin: .8rem 0 0; font-size: .9rem; color: var(--tinta-2); }
 .conferir .icone { color: var(--tinta-3); }
 .conferir b { color: var(--tinta); font-weight: 600; }

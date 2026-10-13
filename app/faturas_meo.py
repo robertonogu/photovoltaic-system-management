@@ -47,7 +47,9 @@ LINHA = re.compile(
 def ler(texto: str) -> dict:
     if "MEO Energia" not in texto:
         raise FaturaIlegivel("Não parece uma fatura da MEO Energia.")
-    f: dict = {"comercializador": "MEO Energia"}
+    if re.search(r"Autofatura:|Excedente energia produzida", texto):
+        return ler_autofatura(texto)
+    f: dict = {"comercializador": "MEO Energia", "tipo": "compra"}
 
     m = re.search(r"Fatura:\s*(.+?)\s+de\s+(\d{2}/\d{2}/\d{4})", texto)
     if not m:
@@ -130,6 +132,41 @@ def ler(texto: str) -> dict:
     reduzida = energia * min(1.0, lim / kwh) if kwh else 0.0
     esperado = 0.06 * (reduzida + cav) + 0.23 * (energia - reduzida + pot_valor + iec + dgeg + outros)
     f["confere"] = abs(esperado - f["iva_eur"]) <= 0.05
+    return f
+
+
+# linha da autofatura: "Excedente energia produzida 21/07/2026 30/09/2026 404,21 kWh € 0,06 € 24,25 0 %"
+LINHA_VENDA = re.compile(
+    r"Excedente[^\n]*?(?P<ini>\d{2}/\d{2}/\d{4})\s+(?P<fim>\d{2}/\d{2}/\d{4})\s*(?P<kwh>" + NUM + r")\s*kWh"
+    r"\s*€\s*(?P<unit>" + NUM + r")\s*€\s*(?P<valor>" + NUM + r")")
+
+
+def ler_autofatura(texto: str) -> dict:
+    """Autofatura de venda do excedente: a MEO compra-te a energia injetada na rede."""
+    f: dict = {"comercializador": "MEO Energia", "tipo": "venda"}
+    m = re.search(r"Autofatura:\s*(.+?)\s+de\s+(\d{2}/\d{2}/\d{4})", texto)
+    if not m:
+        raise FaturaIlegivel("Não encontrei o número da autofatura.")
+    f["numero"] = re.sub(r"\s+", " ", m.group(1)).strip()
+    f["emitida"] = _d(m.group(2))
+
+    linhas = list(LINHA_VENDA.finditer(texto))
+    if not linhas:
+        raise FaturaIlegivel("Não encontrei a linha do excedente (kWh e preço) na autofatura.")
+    m = re.search(r"Período de autofaturação:\s*(\d{2}/\d{2}/\d{4})\s*a\s*(\d{2}/\d{2}/\d{4})", texto)
+    if m:
+        f["inicio"], f["fim"] = _d(m.group(1)), _d(m.group(2))
+    else:
+        f["inicio"], f["fim"] = min(_d(x["ini"]) for x in linhas), max(_d(x["fim"]) for x in linhas)
+    f["dias"] = (date.fromisoformat(f["fim"]) - date.fromisoformat(f["inicio"])).days + 1
+
+    f["kwh"] = round(sum(_n(x["kwh"]) for x in linhas), 2)
+    valor = round(sum(_n(x["valor"]) for x in linhas), 2)
+    # com várias linhas (o preço mudou a meio), o preço é a média ponderada
+    f["preco_kwh"] = _n(linhas[0]["unit"]) if len(linhas) == 1 or not f["kwh"] else round(valor / f["kwh"], 4)
+    m = re.search(r"Total a receber:\s*€\s*(" + NUM + r")", texto) or re.search(r"TOTAL\s*€\s*(" + NUM + r")", texto)
+    f["total_eur"] = _n(m.group(1)) if m else valor
+    f["confere"] = abs(f["total_eur"] - valor) <= 0.02
     return f
 
 

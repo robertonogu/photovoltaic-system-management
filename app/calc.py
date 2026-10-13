@@ -42,8 +42,12 @@ def custo_energia(kwh: float, preco: float, dias: int, imp: Impostos) -> float:
 
 
 def calcular(meses: list[dict], contratos: list[Contrato], faturas: dict[str, float],
-             imp: Impostos, hoje: date | None = None) -> list[dict]:
-    """meses: [{mes, consumo_kwh, rede_kwh, injetado_kwh, bateria_kwh}] ordenados ou não."""
+             imp: Impostos, hoje: date | None = None, vendas: dict[str, dict] | None = None) -> list[dict]:
+    """meses: [{mes, consumo_kwh, rede_kwh, injetado_kwh, bateria_kwh}] ordenados ou não.
+
+    vendas: o que as autofaturas pagam em cada mês, {mes: {eur, fracao}} (ver vendas_por_mes); a parte
+    do mês que nenhuma autofatura cobre continua estimada pela Deye e pelo contrato de venda."""
+    vendas = vendas or {}
     hoje = hoje or date.today()
     mes_atual = f"{hoje.year:04d}-{hoje.month:02d}"
     sem_contrato = Contrato("compra", "—", "0000-01-01", 0.0)
@@ -68,6 +72,9 @@ def calcular(meses: list[dict], contratos: list[Contrato], faturas: dict[str, fl
         com = custo_energia(rede, compra.preco_kwh, dias, imp) + potencia
         sem = custo_energia(consumo, compra.preco_kwh, dias, imp) + potencia
         venda_eur = injetado * (venda.preco_kwh if venda else 0)
+        v = vendas.get(mes)
+        if v:
+            venda_eur = v["eur"] + venda_eur * max(1 - v["fracao"], 0)
         poupanca = sem - com + venda_eur
         acumulado += poupanca
         real = faturas.get(mes)
@@ -80,6 +87,7 @@ def calcular(meses: list[dict], contratos: list[Contrato], faturas: dict[str, fl
             "fatura_com": round(real if real is not None else com, 2),
             "fatura_sem": round(real + sem - com if real is not None else sem, 2),
             "venda_eur": round(venda_eur, 2),
+            "venda_real": None if not v else ("total" if v["fracao"] >= 0.999 else "parcial"),
             "evitado_eur": round(sem - com, 2),
             "poupanca_eur": round(poupanca, 2),
             "acumulado_eur": round(acumulado, 2),
@@ -147,6 +155,43 @@ def faturas_por_mes(faturas: list[dict]) -> dict[str, float]:
         a, m = map(int, mes.split("-"))
         if len(cobertos[mes]) == calendar.monthrange(a, m)[1]:
             out[mes] = round(v, 2)
+    return out
+
+
+def vendas_por_mes(autofaturas: list[dict], dias: dict[str, dict]) -> dict[str, dict]:
+    """Reparte o valor de cada autofatura pelos meses.
+
+    A repartição segue a energia injetada em cada dia pela Deye (há dias de muito mais sol do que outros);
+    sem dados diários suficientes, reparte por igual pelos dias. Devolve {mes: {eur, fracao}}, em que
+    fracao é a parte da injeção desse mês coberta por autofaturas (1 = mês todo).
+    """
+    eur: dict[str, float] = {}
+    cobertos: dict[str, set] = {}
+    for f in autofaturas:
+        datas = list(_datas(f["inicio"], f["fim"]))
+        pesos = [(dias.get(d.isoformat()) or {}).get("injetado_kwh") for d in datas]
+        com_dados = [p for p in pesos if p is not None]
+        if len(com_dados) >= 0.9 * len(datas) and sum(com_dados) > 0:
+            media = sum(com_dados) / len(com_dados)  # os poucos dias em falta contam pela média
+            pesos = [media if p is None else p for p in pesos]
+        else:
+            pesos = [1.0] * len(datas)
+        soma = sum(pesos) or 1
+        for d, p in zip(datas, pesos):
+            mes = d.strftime("%Y-%m")
+            eur[mes] = eur.get(mes, 0.0) + f["total_eur"] * p / soma
+            cobertos.setdefault(mes, set()).add(d)
+    out = {}
+    for mes, v in eur.items():
+        a, m = map(int, mes.split("-"))
+        n = calendar.monthrange(a, m)[1]
+        todos = [date(a, m, i) for i in range(1, n + 1)]
+        inj = {d: (dias.get(d.isoformat()) or {}).get("injetado_kwh") for d in todos}
+        if all(x is not None for x in inj.values()) and sum(inj.values()) > 0:
+            fracao = sum(inj[d] for d in cobertos[mes]) / sum(inj.values())
+        else:
+            fracao = len(cobertos[mes]) / n
+        out[mes] = {"eur": round(v, 2), "fracao": round(fracao, 4)}
     return out
 
 

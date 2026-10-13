@@ -5,12 +5,74 @@
 <div class="pagina-cabeca">
   <div>
     <h1>Faturas</h1>
+    {% if tipo == 'venda' %}
+    <p>As autofaturas são o que a MEO te paga pela energia que injetas na rede. A app compara os kWh de cada uma com o que a Deye mediu no mesmo período, e na poupança usa o valor real em vez da estimativa.</p>
+    {% else %}
     <p>As faturas vão de um dia a outro, não de mês a mês. Para cada uma, a app junta os dados diários da Deye desse período exato e refaz a fatura como se não tivesses painéis, com os preços da própria fatura.</p>
+    {% endif %}
   </div>
   {% if email_ativo %}<span class="etiqueta verde">Chegam por email</span>
   {% else %}<a class="etiqueta" href="{{ url_for('definicoes') }}#email">Ligar a receção por email</a>{% endif %}
 </div>
 
+<nav class="separadores" aria-label="Tipo de fatura">
+  <a href="{{ url_for('faturas') }}" {% if tipo == 'compra' %}aria-current="page"{% endif %}>{{ icone("rede") }} Consumo <span class="etiqueta">{{ n_compra }}</span></a>
+  <a href="{{ url_for('faturas', tipo='venda') }}" {% if tipo == 'venda' %}aria-current="page"{% endif %}>{{ icone("venda") }} Venda <span class="etiqueta">{{ n_venda }}</span></a>
+</nav>
+
+{% if tipo == 'venda' %}
+{% for f in autofaturas %}
+<section class="bloco fatura" aria-labelledby="v-{{ loop.index }}">
+  <div class="bloco-cabeca">
+    <div>
+      <h2 id="v-{{ loop.index }}">{{ f.inicio[8:] }}/{{ f.inicio[5:7] }} a {{ f.fim[8:] }}/{{ f.fim[5:7] }}/{{ f.fim[:4] }}</h2>
+      <p>{{ f.dias }} dias · {{ f.comercializador or 'Autofatura' }} · {{ f.numero }}
+        {% if f.origem == 'email' %}<span class="etiqueta">por email</span>{% endif %}</p>
+    </div>
+    <form method="post" action="{{ url_for('apagar_fatura', numero=f.numero) }}" onsubmit="return confirm('Apagar esta autofatura?')">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="link-perigo" title="Apagar autofatura">{{ icone("lixo") }}</button>
+    </form>
+  </div>
+
+  <div class="comparacao duas">
+    <div class="comp-col destaque">
+      <span class="lbl">Recebes</span>
+      <b class="grande">{{ f.total_eur|eur }}</b>
+      <small>{{ f.kwh|kwh }} kWh × {{ f.preco_kwh|num }} €</small>
+    </div>
+    <div class="comp-col">
+      <span class="lbl">Pela Deye, a app estimava</span>
+      <b class="grande">{{ f.estimado_eur|eur if f.fonte else '—' }}</b>
+      <small>{% if f.fonte %}{{ f.deye_kwh|kwh }} kWh injetados{% else %}sem dados da Deye neste período{% endif %}</small>
+    </div>
+  </div>
+  {% if f.variacao is defined and f.variacao is not none %}
+  {% set dif = f.variacao|abs %}
+  <p class="conferir">{{ icone("venda") }}
+    <span>Injetado: autofatura <b>{{ f.kwh|kwh }} kWh</b> · Deye <b>{{ f.deye_kwh|kwh }} kWh</b>{% if f.fonte != 'diária' %} (pelos totais mensais){% endif %}</span>
+    <span class="etiqueta {{ 'verde' if dif < 0.05 else ('sol' if dif <= 0.15 else 'perigo') }}"
+          title="{{ 'Batem certo' if dif < 0.05 else ('Diferença pequena' if dif <= 0.15 else 'Diferença grande') }}">
+      {{ '+' if f.variacao > 0 }}{{ f.variacao|pct }}</span></p>
+  {% endif %}
+
+  <ul class="avisos-fatura">
+    {% if f.preco_diferente %}
+    <li class="sol">{{ icone("alerta") }}<span>O preço desta autofatura ({{ f.preco_kwh|num }} €/kWh) não bate com o contrato de venda em vigor.</span>
+      <form method="post" action="{{ url_for('contrato_da_fatura', numero=f.numero) }}">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="botao leve pequeno">Criar contrato de venda com este preço</button>
+      </form></li>
+    {% endif %}
+    {% if f.variacao is defined and f.variacao is not none and f.variacao|abs > 0.15 %}
+    <li>{{ icone("alerta") }}<span>A Deye mediu {{ f.deye_kwh|kwh }} kWh injetados e a MEO pagou {{ f.kwh|kwh }} kWh. Quem conta para receberes é o contador da E-Redes; a Deye mede no inversor e pode ter dias em falta.</span></li>
+    {% endif %}
+  </ul>
+</section>
+{% else %}
+<section class="bloco"><div class="vazio">{{ icone("venda") }}<p>Ainda não há autofaturas de venda. Chegam pelo mesmo email das faturas: reencaminha também os emails da MEO com a autofatura em PDF.</p></div></section>
+{% endfor %}
+{% else %}
 {% for f in faturas %}
 <section class="bloco fatura" aria-labelledby="f-{{ loop.index }}">
   <div class="bloco-cabeca">
@@ -96,6 +158,7 @@
 {% else %}
 <section class="bloco"><div class="vazio">{{ icone("fatura") }}<p>Ainda não há faturas. Chegam sozinhas quando reencaminhas o email da MEO Energia com o PDF (ver <a href="{{ url_for('definicoes') }}#email">Definições</a>).</p></div></section>
 {% endfor %}
+{% endif %}
 
 {% if antigas %}
 <section class="bloco">
