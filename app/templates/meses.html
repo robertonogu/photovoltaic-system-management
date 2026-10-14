@@ -126,14 +126,17 @@
     // totais do que está no gráfico
     const t = linhas.reduce((a, r) => { ['producao', 'solar_casa', 'injetado', 'rede', 'consumo'].forEach((k) => { a[k] += r[k]; }); return a; },
       { producao: 0, solar_casa: 0, injetado: 0, rede: 0, consumo: 0 });
+    // cada cartão mostra as duas partes do SEU total (produção ou consumo), para as percentagens somarem 100
+    const perdas = t.producao ? Math.max(1 - (t.solar_casa + t.injetado) / t.producao, 0) : 0;
     $('t-prod').textContent = kwh(t.producao);
-    $('t-prod-sub').textContent = t.producao ? pct(t.solar_casa / t.producao) + ' usado em casa' : '';
+    $('t-prod-sub').textContent = t.producao ? pct(t.solar_casa / t.producao) + ' gasto em casa, ' + pct(t.injetado / t.producao) + ' injetado'
+      + (perdas >= 0.02 ? ', ' + pct(perdas) + ' perdas da bateria' : '') : '';
     $('t-inj').textContent = kwh(t.injetado);
-    $('t-inj-sub').textContent = t.producao ? pct(t.injetado / t.producao) + ' da produção' : '';
+    $('t-inj-sub').textContent = t.producao ? pct(t.injetado / t.producao) + ' do que produziste' : '';
     $('t-rede').textContent = kwh(t.rede);
-    $('t-rede-sub').textContent = t.consumo ? pct(t.rede / t.consumo) + ' do consumo' : '';
+    $('t-rede-sub').textContent = t.consumo ? pct(t.rede / t.consumo) + ' do que a casa gastou' : '';
     $('t-cons').textContent = kwh(t.consumo);
-    $('t-cons-sub').textContent = t.consumo ? pct(t.solar_casa / t.consumo) + ' veio do sol' : '';
+    $('t-cons-sub').textContent = t.consumo ? pct(t.solar_casa / t.consumo) + ' do sol, ' + pct(t.rede / t.consumo) + ' da rede' : '';
 
     // tabela (mesmos números do gráfico)
     $('tab-col').textContent = vista === 'ano' ? 'Ano' : vista === 'mes' ? 'Mês' : 'Dia';
