@@ -489,7 +489,11 @@ def _criar_app() -> Flask:
             lista = con.execute("SELECT * FROM meses ORDER BY mes DESC")
         for m in lista:
             m["direto_kwh"] = max((m["consumo_kwh"] or 0) - (m["rede_kwh"] or 0) - (m["bateria_kwh"] or 0), 0)
-        return render_template("meses.html", meses=lista, ultima=sync.ultima())
+        with db.ligar() as con:
+            diarios = con.execute("SELECT data, consumo_kwh, rede_kwh, injetado_kwh, producao_kwh FROM dias ORDER BY data")
+        return render_template("meses.html", meses=lista, ultima=sync.ultima(),
+                               balanco_meses=[_balanco(m["mes"], m) for m in sorted(lista, key=lambda x: x["mes"])],
+                               balanco_dias=[_balanco(d["data"], d) for d in diarios])
 
     @app.post("/meses/<mes>/apagar")
     def apagar_mes(mes):
@@ -574,3 +578,14 @@ def _num(v):
     except ValueError:
         return None
 
+
+def _balanco(periodo: str, r: dict) -> dict:
+    """Para onde foi a produção e de onde veio o consumo, num dia ou num mês."""
+    consumo = float(r.get("consumo_kwh") or 0)
+    rede = float(r.get("rede_kwh") or 0)
+    injetado = float(r.get("injetado_kwh") or 0)
+    solar_casa = max(consumo - rede, 0.0)  # inclui o que passou pela bateria
+    producao = r.get("producao_kwh")
+    producao = float(producao) if producao not in (None, "") else solar_casa + injetado
+    return {"p": periodo, "producao": round(producao, 2), "solar_casa": round(solar_casa, 2),
+            "injetado": round(injetado, 2), "rede": round(rede, 2), "consumo": round(consumo, 2)}

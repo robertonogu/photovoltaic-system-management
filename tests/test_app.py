@@ -504,3 +504,18 @@ def test_autofatura_por_email(cliente, monkeypatch):
 
     c.post("/faturas/FT AFAT.0ODA0/1/apagar", data={"csrf": t})
     assert "FT AFAT.0ODA0/1" not in c.get("/faturas?tipo=venda").get_data(as_text=True)
+
+
+def test_balanco_producao_consumo():
+    from app import _balanco
+    b = _balanco("2026-09", {"consumo_kwh": 280.99, "rede_kwh": 43.8, "injetado_kwh": 219.89, "producao_kwh": 470})
+    assert b == {"p": "2026-09", "producao": 470, "solar_casa": 237.19, "injetado": 219.89, "rede": 43.8, "consumo": 280.99}
+    # sem produção registada (meses escritos à mão): produção = solar consumido + injetado
+    assert _balanco("2026-07", {"consumo_kwh": 216.37, "rede_kwh": 15.79, "injetado_kwh": 40.59})["producao"] == 241.17
+
+
+def test_pagina_energia_tem_grafico(cliente):
+    c = cliente
+    entrar(c)
+    html = c.get("/meses").get_data(as_text=True)
+    assert 'id="g-balanco"' in html and '"solar_casa"' in html

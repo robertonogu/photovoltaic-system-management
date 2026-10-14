@@ -1,10 +1,11 @@
 {% extends "base.html" %}
 {% from "icones.html" import icone %}
 {% block titulo %}Energia · Poupança solar{% endblock %}
+
 {% block conteudo %}
 <div class="pagina-cabeca">
   <div>
-  <h1>Energia por mês</h1>
+  <h1>Energia</h1>
   <p>Os meses chegam sozinhos da Deye Cloud todos os dias.</p>
   </div>
   <form method="post" action="{{ url_for('sincronizar') }}" data-sync>
@@ -12,6 +13,48 @@
   <button class="botao leve" {{ 'disabled' if not deye_ok }}>{{ icone("atualizar") }} Atualizar da Deye</button>
   </form>
 </div>
+
+<section class="bloco" id="balanco" aria-labelledby="t-balanco">
+  <div class="bloco-cabeca">
+    <div>
+      <h2 id="t-balanco">Produção e consumo</h2>
+      <p>Por cima: para onde foi a energia dos painéis. Por baixo: de onde veio a energia que a casa gastou.</p>
+    </div>
+    <div class="segmentos vistas" role="radiogroup" aria-label="Agrupar por">
+      <label><input type="radio" name="vista" value="dia">Dia</label>
+      <label><input type="radio" name="vista" value="mes" checked>Mês</label>
+      <label><input type="radio" name="vista" value="ano">Ano</label>
+    </div>
+  </div>
+  <div class="vista-dia" hidden>
+    <label class="campo campo-mes"><span>Mês</span><select id="mes-dia"></select></label>
+  </div>
+
+  <dl class="balanco-totais" aria-live="polite">
+    <div><dt><i class="bx bx-sol"></i>Produzido</dt><dd id="t-prod">—</dd><small id="t-prod-sub"></small></div>
+    <div><dt><i class="bx bx-inj"></i>Injetado na rede</dt><dd id="t-inj">—</dd><small id="t-inj-sub"></small></div>
+    <div><dt><i class="bx bx-rede"></i>Comprado à rede</dt><dd id="t-rede">—</dd><small id="t-rede-sub"></small></div>
+    <div><dt>Consumo da casa</dt><dd id="t-cons">—</dd><small id="t-cons-sub"></small></div>
+  </dl>
+
+  <div class="legenda" aria-hidden="true">
+    <span><i class="bx-sol"></i>Solar consumido em casa</span>
+    <span><i class="bx-inj"></i>Injetado na rede</span>
+    <span><i class="bx-rede"></i>Comprado à rede</span>
+  </div>
+  <div class="grafico grafico-alto"><canvas id="g-balanco" role="img" aria-label="Produção e consumo de energia"></canvas></div>
+  <p class="nota-texto" id="balanco-vazio" hidden>Ainda não há dados diários. Aparecem depois da próxima atualização da Deye.</p>
+
+  <details class="detalhe">
+    <summary>Ver os números</summary>
+    <div class="tabela-wrap">
+      <table id="tab-balanco">
+        <thead><tr><th id="tab-col">Mês</th><th>Produzido</th><th>Solar em casa</th><th>Injetado</th><th>Da rede</th><th>Consumo</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </details>
+</section>
 
 {% if ultima and not ultima.ok %}
 <div class="aviso erro" role="status">{{ icone("alerta") }}<span>A última sincronização falhou: {{ ultima.mensagem }}</span></div>
@@ -44,4 +87,122 @@
   <div class="vazio">{{ icone("energia") }}<p>Sem meses ainda. Atualiza da Deye.</p></div>
   {% endif %}
 </section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='chart.umd.min.js') }}"></script>
+<script>
+(() => {
+  const MESES = {{ balanco_meses|tojson }}, DIAS = {{ balanco_dias|tojson }};
+  const NOMES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+  const LONGOS = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+  const css = getComputedStyle(document.documentElement), cor = (v) => css.getPropertyValue(v).trim();
+  const kwh = (v) => Math.round(v).toLocaleString('pt-PT') + ' kWh';
+  const pct = (v) => Math.round(v * 100) + ' %';
+  const $ = (id) => document.getElementById(id);
+
+  // agrupar por ano a partir dos meses
+  const ANOS = Object.values(MESES.reduce((acc, m) => {
+    const a = m.p.slice(0, 4);
+    acc[a] = acc[a] || { p: a, producao: 0, solar_casa: 0, injetado: 0, rede: 0, consumo: 0 };
+    ['producao', 'solar_casa', 'injetado', 'rede', 'consumo'].forEach((k) => { acc[a][k] += m[k]; });
+    return acc;
+  }, {}));
+
+  // meses com dados diários, para escolher na vista "Dia"
+  const mesesComDias = [...new Set(DIAS.map((d) => d.p.slice(0, 7)))].reverse();
+  const sel = $('mes-dia');
+  mesesComDias.forEach((m) => sel.add(new Option(LONGOS[+m.slice(5) - 1] + ' ' + m.slice(0, 4), m)));
+
+  const rotulo = (vista, p) => vista === 'ano' ? p : vista === 'mes' ? NOMES[+p.slice(5) - 1] + ' ' + p.slice(2, 4) : String(+p.slice(8));
+
+  let grafico;
+  function desenhar() {
+    const vista = document.querySelector('input[name=vista]:checked').value;
+    document.querySelector('.vista-dia').hidden = vista !== 'dia';
+    let linhas = vista === 'ano' ? ANOS : vista === 'mes' ? MESES : DIAS.filter((d) => d.p.startsWith(sel.value));
+    $('balanco-vazio').hidden = !(vista === 'dia' && !linhas.length);
+
+    // totais do que está no gráfico
+    const t = linhas.reduce((a, r) => { ['producao', 'solar_casa', 'injetado', 'rede', 'consumo'].forEach((k) => { a[k] += r[k]; }); return a; },
+      { producao: 0, solar_casa: 0, injetado: 0, rede: 0, consumo: 0 });
+    $('t-prod').textContent = kwh(t.producao);
+    $('t-prod-sub').textContent = t.producao ? pct(t.solar_casa / t.producao) + ' usado em casa' : '';
+    $('t-inj').textContent = kwh(t.injetado);
+    $('t-inj-sub').textContent = t.producao ? pct(t.injetado / t.producao) + ' da produção' : '';
+    $('t-rede').textContent = kwh(t.rede);
+    $('t-rede-sub').textContent = t.consumo ? pct(t.rede / t.consumo) + ' do consumo' : '';
+    $('t-cons').textContent = kwh(t.consumo);
+    $('t-cons-sub').textContent = t.consumo ? pct(t.solar_casa / t.consumo) + ' veio do sol' : '';
+
+    // tabela (mesmos números do gráfico)
+    $('tab-col').textContent = vista === 'ano' ? 'Ano' : vista === 'mes' ? 'Mês' : 'Dia';
+    const tb = document.querySelector('#tab-balanco tbody'); tb.replaceChildren();
+    [...linhas].reverse().forEach((r) => {
+      const tr = document.createElement('tr');
+      [vista === 'dia' ? r.p.slice(8) + '/' + r.p.slice(5, 7) : rotulo(vista, r.p), kwh(r.producao), kwh(r.solar_casa), kwh(r.injetado), kwh(r.rede), kwh(r.consumo)]
+        .forEach((v) => { const td = document.createElement('td'); td.textContent = v; tr.appendChild(td); });
+      tb.appendChild(tr);
+    });
+
+    const C = { sol: cor('--bx-sol'), inj: cor('--bx-inj'), rede: cor('--bx-rede') };
+    const base = { borderColor: cor('--superficie'), borderWidth: 1, borderSkipped: false, maxBarThickness: vista === 'dia' ? 18 : 40 };
+    const dados = {
+      labels: linhas.map((r) => rotulo(vista, r.p)),
+      datasets: [
+        { ...base, label: 'Solar consumido em casa', data: linhas.map((r) => r.solar_casa), backgroundColor: C.sol, stack: 's', lado: 'cima' },
+        { ...base, label: 'Injetado na rede', data: linhas.map((r) => r.injetado), backgroundColor: C.inj, stack: 's', lado: 'cima',
+          borderRadius: { topLeft: 4, topRight: 4 } },
+        { ...base, label: 'Solar consumido em casa', data: linhas.map((r) => -r.solar_casa), backgroundColor: C.sol, stack: 's', lado: 'baixo' },
+        { ...base, label: 'Comprado à rede', data: linhas.map((r) => -r.rede), backgroundColor: C.rede, stack: 's', lado: 'baixo',
+          borderRadius: { bottomLeft: 4, bottomRight: 4 } },
+      ],
+    };
+    if (grafico) grafico.destroy();
+    grafico = new Chart($('g-balanco'), {
+      type: 'bar', data: dados,
+      options: {
+        maintainAspectRatio: false,
+        layout: { padding: { top: 24 } },
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: cor('--tinta'), titleColor: cor('--superficie'), bodyColor: cor('--superficie'),
+            padding: 10, cornerRadius: 8, boxPadding: 4,
+            filter: (it) => it.datasetIndex !== 2, // o solar consumido aparece só uma vez
+            callbacks: {
+              title: (it) => { const r = linhas[it[0].dataIndex];
+                return vista === 'ano' ? r.p : vista === 'mes' ? LONGOS[+r.p.slice(5) - 1] + ' ' + r.p.slice(0, 4) : r.p.slice(8) + '/' + r.p.slice(5, 7); },
+              beforeBody: (it) => 'Produzido: ' + kwh(linhas[it[0].dataIndex].producao),
+              label: (c) => ' ' + c.dataset.label + ': ' + kwh(Math.abs(c.parsed.y)),
+              footer: (it) => 'Consumo da casa: ' + kwh(linhas[it[0].dataIndex].consumo),
+            },
+          },
+        },
+        scales: {
+          x: { stacked: true, grid: { display: false }, border: { display: false }, ticks: { color: cor('--tinta-3'), autoSkip: true, maxRotation: 0 } },
+          y: { stacked: true, border: { display: false },
+               grid: { color: (c) => c.tick.value === 0 ? cor('--tinta-3') : cor('--linha'), lineWidth: (c) => c.tick.value === 0 ? 1.5 : 1 },
+               ticks: { color: cor('--tinta-3'), maxTicksLimit: 7, callback: (v) => Math.abs(v).toLocaleString('pt-PT') } },
+        },
+      },
+      plugins: [{
+        // rótulos "Produção" e "Consumo" ao lado do eixo
+        id: 'lados',
+        afterDraw(ch) {
+          const { ctx, chartArea: a } = ch;
+          ctx.save(); ctx.font = '600 12px ' + cor('--f-texto'); ctx.fillStyle = cor('--tinta-2'); ctx.textBaseline = 'bottom';
+          ctx.textAlign = 'left'; ctx.fillText('↑ Produção', a.left, a.top - 8);
+          ctx.textAlign = 'right'; ctx.fillText('↓ Consumo', a.right, a.top - 8);
+          ctx.restore();
+        },
+      }],
+    });
+  }
+  document.querySelectorAll('input[name=vista]').forEach((r) => r.addEventListener('change', desenhar));
+  sel.addEventListener('change', desenhar);
+  desenhar();
+})();
+</script>
 {% endblock %}

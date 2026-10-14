@@ -336,3 +336,20 @@ details[open] summary { margin-bottom: .9rem; }
 .botao.pequeno { padding: .45rem .8rem; font-size: .85rem; }
 .copiar { display: flex; gap: .5rem; }
 .copiar input { font-family: ui-monospace, monospace; font-size: .8rem; }
+
+/* ---------- balanço produção / consumo (cores validadas para daltonismo, claro e escuro) ---------- */
+:root { --bx-sol: #eda100; --bx-inj: #1baf7a; --bx-rede: #2a78d6; }
+@media (prefers-color-scheme: dark) { :root { --bx-sol: #c98500; --bx-inj: #199e70; --bx-rede: #3987e5; } }
+.bx-sol { background: var(--bx-sol); } .bx-inj { background: var(--bx-inj); } .bx-rede { background: var(--bx-rede); }
+.vistas { min-width: 15rem; grid-template-columns: repeat(3, 1fr); }
+.vistas label { padding: .45rem .6rem; }
+.campo-mes { max-width: 16rem; margin-bottom: .75rem; }
+select { font: inherit; color: var(--tinta); background: var(--ceu); border: 1px solid var(--linha); border-radius: var(--r-pequeno); padding: .6rem .7rem; }
+.balanco-totais { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; margin: 0 0 1rem; }
+.balanco-totais > div { background: var(--ceu); border-radius: var(--r-pequeno); padding: .75rem .9rem; display: grid; gap: .1rem; }
+.balanco-totais dt { font-size: .82rem; color: var(--tinta-2); display: flex; align-items: center; gap: .4rem; }
+.balanco-totais dt i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.balanco-totais dd { margin: 0; font-family: var(--f-titulo); font-weight: 600; font-size: 1.35rem; }
+.balanco-totais small { color: var(--tinta-3); font-size: .78rem; min-height: 1em; }
+@media (max-width: 760px) { .balanco-totais { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.grafico-alto { height: 340px; }
