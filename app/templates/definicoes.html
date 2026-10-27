@@ -93,12 +93,6 @@
         <input id="email-url" readonly value="{{ email_url }}" onclick="this.select()">
         <button class="botao leve pequeno" type="button" onclick="navigator.clipboard.writeText(document.getElementById('email-url').value); this.textContent='Copiado'">Copiar</button>
       </div>
-      <ol class="passos" style="margin-top:1rem">
-        <li>Cria uma conta num serviço que transforma emails em pedidos web, por exemplo o <b>CloudMailin</b> (tem plano gratuito; confirma os limites). Ele dá-te um endereço de email.</li>
-        <li>Nesse serviço, põe o endereço acima como destino (<i>target URL</i>), no formato <b>JSON</b> ou <b>multipart</b>.</li>
-        <li>No Gmail: Definições → <b>Encaminhamento</b> → adiciona o endereço de email do serviço. O código de confirmação do Gmail aparece aqui em baixo, em <b>Emails recebidos</b>.</li>
-        <li>No Gmail, cria um filtro: <code>from:(meoenergia)</code> com anexo → <b>Encaminhar</b> para esse endereço.</li>
-      </ol>
       {% if emails %}
       <h3 style="margin:1.2rem 0 .3rem;font-size:1rem">Emails recebidos</h3>
       <ul class="lista">

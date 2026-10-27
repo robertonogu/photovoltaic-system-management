@@ -479,7 +479,7 @@ def _criar_app() -> Flask:
             flash("Receção de faturas por email desligada.", "ok")
         else:
             db.guardar_segredo("email_token", secrets.token_urlsafe(24))
-            flash("Endereço de receção criado. Copia-o para o CloudMailin.", "ok")
+            flash("Endereço de receção criado. Copia-o para o serviço de email (webhook).", "ok")
         return redirect(url_for("definicoes") + "#email")
 
     # ---------- meses (dados de energia) ----------
